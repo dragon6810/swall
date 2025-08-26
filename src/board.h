@@ -26,6 +26,9 @@ typedef enum
 // 0000 (0 = white, 1 = black) type
 typedef uint8_t piece_t;
 
+// src, dst
+typedef uint8_t move_t[2];
+
 typedef struct board_s
 {
     // i = (rank - 1) * BOARD_LEN + (file - 1)
@@ -39,5 +42,6 @@ typedef struct board_s
 
 void board_print(const board_t* board);
 void board_loadfen(board_t* board, const char* fen);
+bool board_movelegal(const board_t* board, const move_t move);
 
 #endif

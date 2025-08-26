@@ -186,3 +186,15 @@ badfen:
     printf("bad fen \"%s\".\n", fen);
     exit(1);
 }
+
+bool board_movelegal(const board_t* board, const move_t move)
+{
+    /*
+    piece_t srcsqr, dstsqr;
+
+    srcsqr = board->pieces[move[0]];
+    dstsqr = board->pieces[move[1]];
+    */
+
+    return true;
+}
