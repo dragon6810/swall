@@ -187,14 +187,38 @@ badfen:
     exit(1);
 }
 
+bool board_movelegal_king(const board_t* board, const move_t move)
+{
+    int i;
+
+    int mr[2], mf[2];
+
+    for(i=0; i<2; i++)
+    {
+        mr[i] = move[i] / BOARD_LEN;
+        mf[i] = move[i] - mr[i] * BOARD_LEN;
+        printf("r, f: %d, %d\n", mr[i], mf[i]);
+    }
+
+    printf("%d -> %d\n", move[0], move[1]);
+    printf("%c%c -> %c%c\n", mf[0] + 'a', mr[0] + '1', mf[1] + 'a', mr[1] + '1');
+    return true;
+}
+
 bool board_movelegal(const board_t* board, const move_t move)
 {
-    /*
-    piece_t srcsqr, dstsqr;
+    piece_t p[2];
 
-    srcsqr = board->pieces[move[0]];
-    dstsqr = board->pieces[move[1]];
-    */
+    p[0] = board->pieces[move[0]];
+    p[1] = board->pieces[move[1]];
+    if((p[1] & PIECE_MASK_TYPE) != PIECE_NONE && (p[0] & PIECE_MASK_COLOR) == (p[1] & PIECE_MASK_COLOR))
+        return false;
 
-    return true;
+    switch(board->pieces[move[0]] & PIECE_MASK_TYPE)
+    {
+    case PIECE_KING:
+        return board_movelegal_king(board, move);
+    default:
+        return false;
+    }
 }

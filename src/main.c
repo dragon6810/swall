@@ -49,7 +49,10 @@ int main(int argc, char** argv)
                     break;
             }
             if(i < 2)
+            {
+                printf("invalid coordinates.\n");
                 continue;
+            }
 
             for(i=0; i<2; i++)
             {
@@ -58,12 +61,21 @@ int main(int argc, char** argv)
                 move[i] = r * BOARD_LEN + f;
             }
 
+            if(!board_movelegal(&board, move))
+            {
+                printf("illegal move.\n");
+                continue;
+            }
+
             board.pieces[move[1]] = board.pieces[move[0]];
             board.pieces[move[0]] = 0;
             board_print(&board);
 
             continue;
         }
+
+        if(buf[0])
+            printf("no matching command.\n");
     }
     
     return 0;
