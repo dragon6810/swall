@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 void board_print(const board_t* board)
 {
@@ -49,7 +50,7 @@ void board_print(const board_t* board)
                 c = ' ';
             }
 
-            if(c != ' ' && ~board->pieces[i] & PIECE_MASK_COLOR)
+            if(c != ' ' && board->pieces[i] & PIECE_MASK_COLOR)
                 c += 'a' - 'A';
 
             printf("| %c ", c);
@@ -62,6 +63,18 @@ void board_print(const board_t* board)
     }
 }
 
+void board_printbits(const bitboard_t bits)
+{
+    int r, f;
+
+    for(r=BOARD_LEN-1; r>=0; r--)
+    {
+        for(f=0; f<BOARD_LEN; f++)
+            printf("%c ", '0' + ((bits[r] & (1 << f)) >> f));
+        printf("\n");
+    }
+}
+
 void board_loadfen(board_t* board, const char* fen)
 {
     int i, r, f;
@@ -70,14 +83,14 @@ void board_loadfen(board_t* board, const char* fen)
     bool black;
     char pc;
 
-    r = 0;
+    r = BOARD_LEN-1;
     f = 0;
     c = fen;
     while(1)
     {
-        if(r == BOARD_LEN-1 && f == BOARD_LEN)
+        if(r <= 0 && f == BOARD_LEN)
             break;
-        printf("r, f, c: %d, %d, %c\n", r, f, *c);
+
         switch(*c)
         {
         case '1':
@@ -150,10 +163,10 @@ void board_loadfen(board_t* board, const char* fen)
 
             break;
         case '/':
-            if(r == BOARD_LEN-1 || f < BOARD_LEN)
+            if(r == 0 || f < BOARD_LEN)
                 goto badfen;
 
-            r++;
+            r--;
             f = 0;
 
             break;
@@ -187,38 +200,110 @@ badfen:
     exit(1);
 }
 
-bool board_movelegal_king(const board_t* board, const move_t move)
+// does not include src in its sweep
+// if maxdst is 0, it will go until it hits the end of the board (or a piece).
+static void board_sweepdir(board_t* board, bitboard_t bits, uint8_t src, dir_e dir, int maxdst)
+{
+    int i, isqr;
+
+    int r, f;
+    uint8_t fmask;
+    piece_t p;
+    int dr, df;
+    
+    p = board->pieces[src];
+
+    r = src / BOARD_LEN;
+    f = src % BOARD_LEN;
+
+    dr = df = 0;
+    if(dir == DIR_E || dir == DIR_NE || dir == DIR_SE)
+        df = 1;
+    if(dir == DIR_N || dir == DIR_NE || dir == DIR_NW)
+        dr = 1;
+    if(dir == DIR_W || dir == DIR_NW || dir == DIR_SW)
+        df = -1;
+    if(dir == DIR_S || dir == DIR_SW || dir == DIR_SE)
+        dr = -1;
+
+    r += dr;
+    f += df;
+    for(i=0; !maxdst||i<maxdst; i++, r+=dr, f+=df)
+    {
+        printf("dr, df = %d, %d\n", dr, df);
+        if(r < 0 || r >= BOARD_LEN)
+            break;
+        if(f < 0 || f >= BOARD_LEN)
+            break;
+
+        isqr = r * BOARD_LEN + f;
+
+        if((board->pieces[isqr] & PIECE_MASK_TYPE) 
+        && (board->pieces[isqr] & PIECE_MASK_COLOR) == (p & PIECE_MASK_COLOR))
+            break;
+
+        fmask = 1 << f;
+        bits[r] |= fmask;
+
+        if(board->pieces[isqr] & PIECE_MASK_TYPE)
+            break;
+    }
+}
+
+void board_getlegal(board_t* board, uint8_t src, bitboard_t outbits)
 {
     int i;
 
-    int mr[2], mf[2];
+    piece_t p;
+    piece_e type;
+    dir_e dir;
+    int dst;
 
-    for(i=0; i<2; i++)
-    {
-        mr[i] = move[i] / BOARD_LEN;
-        mf[i] = move[i] - mr[i] * BOARD_LEN;
-        printf("r, f: %d, %d\n", mr[i], mf[i]);
-    }
+    memset(outbits, 0, BOARD_LEN);
 
-    printf("%d -> %d\n", move[0], move[1]);
-    printf("%c%c -> %c%c\n", mf[0] + 'a', mr[0] + '1', mf[1] + 'a', mr[1] + '1');
-    return true;
-}
+    p = board->pieces[src];
+    type = p & PIECE_MASK_TYPE;
 
-bool board_movelegal(const board_t* board, const move_t move)
-{
-    piece_t p[2];
-
-    p[0] = board->pieces[move[0]];
-    p[1] = board->pieces[move[1]];
-    if((p[1] & PIECE_MASK_TYPE) != PIECE_NONE && (p[0] & PIECE_MASK_COLOR) == (p[1] & PIECE_MASK_COLOR))
-        return false;
-
-    switch(board->pieces[move[0]] & PIECE_MASK_TYPE)
+    switch(type)
     {
     case PIECE_KING:
-        return board_movelegal_king(board, move);
+        for(i=0; i<=DIR_SE; i++)
+            board_sweepdir(board, outbits, src, i, 1);
+        break;
+    case PIECE_QUEEN:
+        for(i=0; i<=DIR_SE; i++)
+            board_sweepdir(board, outbits, src, i, 0);
+        break;
+    case PIECE_ROOK:
+        for(i=0; i<=DIR_S; i++)
+            board_sweepdir(board, outbits, src, i, 0);
+        break;
+    case PIECE_BISHOP:
+        for(i=DIR_NE; i<=DIR_SE; i++)
+            board_sweepdir(board, outbits, src, i, 0);
+        break;
+    case PIECE_KNIGHT:
+        // TODO: Knights
+        break;
+    case PIECE_PAWN:
+        dst = 1;
+        if(p & PIECE_MASK_COLOR)
+        {
+            printf("black %d\n", src);
+            dir = DIR_S;
+            if(src / BOARD_LEN == BOARD_LEN-2)
+                dst = 2;
+        }
+        else
+        {
+            dir = DIR_N;
+            if(src / BOARD_LEN == 1)
+                dst = 2;
+        }
+
+        board_sweepdir(board, outbits, src, dir, dst);
+        break;
     default:
-        return false;
+        break;
     }
 }

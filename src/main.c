@@ -14,6 +14,7 @@ int main(int argc, char** argv)
     char buf[MAX_INPUT];
     char movestr[2][3];
     int r, f;
+    bitboard_t moves;
     move_t move;
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -61,9 +62,12 @@ int main(int argc, char** argv)
                 move[i] = r * BOARD_LEN + f;
             }
 
-            if(!board_movelegal(&board, move))
+            board_getlegal(&board, move[0], moves);
+            board_printbits(moves);
+            
+            if(~moves[r] & (1 << f))
             {
-                printf("illegal move.\n");
+                printf("invalid move.\n");
                 continue;
             }
 

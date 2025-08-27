@@ -14,6 +14,18 @@
 
 typedef enum
 {
+    DIR_E=0,
+    DIR_N,
+    DIR_W,
+    DIR_S,
+    DIR_NE,
+    DIR_NW,
+    DIR_SW,
+    DIR_SE,
+} dir_e;
+
+typedef enum
+{
     PIECE_NONE=0,
     PIECE_KING,
     PIECE_QUEEN,
@@ -40,8 +52,12 @@ typedef struct board_s
     // bool qcastle[2];
 } board_t;
 
+// if you want to make the board not 8x8, this will need changing
+typedef uint8_t bitboard_t[BOARD_LEN];
+
 void board_print(const board_t* board);
+void board_printbits(const bitboard_t bits);
 void board_loadfen(board_t* board, const char* fen);
-bool board_movelegal(const board_t* board, const move_t move);
+void board_getlegal(board_t* board, uint8_t src, bitboard_t outbits);
 
 #endif
