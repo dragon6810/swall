@@ -200,6 +200,53 @@ badfen:
     exit(1);
 }
 
+static void board_knightmoves(board_t* board, bitboard_t bits, uint8_t src)
+{
+    int i, j;
+
+    piece_t p;
+    int r, f;
+    int x, y;
+
+    p = board->pieces[src];
+    r = src / BOARD_LEN;
+    f = src % BOARD_LEN;
+
+    for(i=DIR_E; i<=DIR_S; i++)
+    {
+        for(j=0; j<2; j++)
+        {
+            x = f;
+            y = r;
+
+            if(i == DIR_E)
+                x += 2;
+            if(i == DIR_N)
+                y += 2;
+            if(i == DIR_W)
+                x -= 2;
+            if(i == DIR_S)
+                y -= 2;
+
+            if(i == DIR_E || i == DIR_W)
+                y += j * 2 - 1;
+            if(i == DIR_N || i == DIR_S)
+                x += j * 2 - 1;
+
+            if(x < 0 || x >= BOARD_LEN)
+                continue;
+            if(y < 0 || y >= BOARD_LEN)
+                continue;
+
+            if((board->pieces[y * BOARD_LEN + x] & PIECE_MASK_TYPE)
+            && (board->pieces[y * BOARD_LEN + x] & PIECE_MASK_COLOR) == (p & PIECE_MASK_COLOR))
+                continue;
+
+            bits[y] |= (1 << x);
+        }
+    }
+}
+
 // does not include src in its sweep
 // if maxdst is 0, it will go until it hits the end of the board (or a piece).
 static void board_sweepdir(board_t* board, bitboard_t bits, uint8_t src, dir_e dir, int maxdst)
@@ -283,7 +330,7 @@ void board_getlegal(board_t* board, uint8_t src, bitboard_t outbits)
             board_sweepdir(board, outbits, src, i, 0);
         break;
     case PIECE_KNIGHT:
-        // TODO: Knights
+        board_knightmoves(board, outbits, src);
         break;
     case PIECE_PAWN:
         dst = 1;
