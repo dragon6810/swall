@@ -44,7 +44,10 @@ void move_domove(board_t* board, move_t move);
 void move_findattacks(board_t* board);
 // doesn't clear existing pins
 void move_findpins(board_t* board);
-moveset_t* move_legalmoves(board_t* board, uint8_t src);
+// moves can be NULL
+moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src);
+// every legal move for every piece of whoever's turn it is
+moveset_t* move_alllegal(board_t* board);
 // ignores input flags, fills output flags
 move_t* move_findmove(moveset_t* set, move_t move);
 void move_printset(moveset_t* set);

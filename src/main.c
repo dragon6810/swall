@@ -3,6 +3,7 @@
 
 #include "board.h"
 #include "move.h"
+#include "tests.h"
 
 #define MAX_INPUT 64
 
@@ -18,6 +19,8 @@ int main(int argc, char** argv)
     uint8_t sqrs[2];
     move_t move, *pmove;
     moveset_t *moves;
+
+    tests_movegen();
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     board_findpieces(&board);
@@ -71,7 +74,7 @@ int main(int argc, char** argv)
             move |= sqrs[0];
             move |= ((uint16_t) sqrs[1]) << MOVEBITS_DST_BITS;
 
-            moves = move_legalmoves(&board, sqrs[0]);
+            moves = move_legalmoves(&board, NULL, sqrs[0]);
             move_printset(moves);
             
             if(!(pmove = move_findmove(moves, move)))

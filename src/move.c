@@ -73,6 +73,8 @@ void move_domove(board_t* board, move_t move)
     move_findattacks(board);
     board_freepins(board);
     move_findpins(board);
+
+    board->tomove = !board->tomove;
 }
 
 // 0 <= idx < 8
@@ -752,13 +754,9 @@ static moveset_t* move_filterset(board_t* board, moveset_t* moves)
     return newset;
 }
 
-moveset_t* move_legalmoves(board_t* board, uint8_t src)
+moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
 {
     piece_e type;
-
-    moveset_t* moves;
-
-    moves = NULL;
 
     type = board->pieces[src] & PIECE_MASK_TYPE;
     switch(type)
@@ -787,6 +785,19 @@ moveset_t* move_legalmoves(board_t* board, uint8_t src)
     }
 
     moves = move_filterset(board, moves);
+    return moves;
+}
+
+moveset_t* move_alllegal(board_t* board)
+{
+    int i;
+
+    moveset_t *moves;
+
+    moves = NULL;
+    for(i=0; i<board->npieces[board->tomove]; i++)
+        moves = move_legalmoves(board, moves, board->quickp[board->tomove][i]);
+
     return moves;
 }
 
