@@ -16,7 +16,7 @@ int main(int argc, char** argv)
     char movestr[2][3];
     int r, f;
     uint8_t sqrs[2];
-    move_t move;
+    move_t move, *pmove;
     moveset_t *moves;
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -71,7 +71,7 @@ int main(int argc, char** argv)
             moves = move_legalmoves(&board, sqrs[0]);
             move_printset(moves);
             
-            if(!move_findmove(moves, move))
+            if(!(pmove = move_findmove(moves, move)))
             {
                 printf("invalid move.\n");
                 move_freeset(moves);
@@ -79,8 +79,8 @@ int main(int argc, char** argv)
                 continue;
             }
 
-            move_domove(&board, move);
-            
+            move_domove(&board, *pmove);
+
             board_print(&board);
 
             move_freeset(moves);

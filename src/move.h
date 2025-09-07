@@ -55,7 +55,8 @@ typedef struct moveset_s
 
 void move_domove(board_t* board, move_t move);
 moveset_t* move_legalmoves(board_t* board, uint8_t src);
-bool move_findmove(moveset_t* set, move_t move);
+// ignores input flags, fills output flags
+move_t* move_findmove(moveset_t* set, move_t move);
 void move_printset(moveset_t* set);
 void move_freeset(moveset_t* set);
 

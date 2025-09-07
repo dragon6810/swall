@@ -5,16 +5,20 @@
 
 void move_domove(board_t* board, move_t move)
 {
-    int src, dst;
+    int type, src, dst;
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
 
     // double pawn push
     board->enpas = 0xFF;
     if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_PAWN
     && abs(dst - src) == BOARD_LEN * 2)
         board->enpas = dst;
+    
+    if(type == MOVETYPE_ENPAS)
+        board->pieces[src / BOARD_LEN * BOARD_LEN + dst % BOARD_LEN] = 0;
 
     board->pieces[dst] = board->pieces[src];
     board->pieces[src] = 0;
@@ -133,6 +137,23 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
             continue;
 
         dst = src + diroffs[atk[i]];
+
+        // en passant requites board->enpas have rank of src and file of dst
+        if(board->enpas / BOARD_LEN == src / BOARD_LEN
+        && board->enpas % BOARD_LEN == dst % BOARD_LEN)
+        {
+            move = malloc(sizeof(moveset_t));
+            move->move = 0;
+            move->move |= src;
+            move->move |= dst << MOVEBITS_DST_BITS;
+            move->move |= ((uint16_t)MOVETYPE_ENPAS) << MOVEBITS_TYP_BITS;
+            move->next = set;
+            set = move;
+            
+            // no need to check since logically the square must be clear
+            continue;
+        }
+
         if(!(board->pieces[dst] & PIECE_MASK_TYPE)
         || (board->pieces[dst] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR))
             continue;
@@ -260,19 +281,19 @@ moveset_t* move_legalmoves(board_t* board, uint8_t src)
     }
 }
 
-bool move_findmove(moveset_t* set, move_t move)
+move_t* move_findmove(moveset_t* set, move_t move)
 {
     moveset_t *cur;
 
     cur = set;
     while(cur)
     {
-        if(cur->move == move)
-            return true;
+        if((cur->move & ~MOVEBITS_TYP_MASK) == (move & ~MOVEBITS_TYP_MASK))
+            return &cur->move;
         cur = cur->next;
     }
 
-    return false;
+    return NULL;
 }
 
 void move_printset(moveset_t* set)
