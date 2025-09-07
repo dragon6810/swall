@@ -618,9 +618,58 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
     return set;
 }
 
+static bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
+{
+    int r, f, srcr, srcf, dstr, dstf;
+
+    r = sqr / BOARD_LEN;
+    f = sqr % BOARD_LEN;
+    srcr = pin->start / BOARD_LEN;
+    srcf = pin->start % BOARD_LEN;
+    dstr = pin->end / BOARD_LEN;
+    dstf = pin->end % BOARD_LEN;
+
+    switch(pin->dir)
+    {
+    case DIR_E:
+    case DIR_W:
+        if(r != srcr)
+            return false;
+        if(srcf < dstf && f < srcf && f >= dstf)
+            return false;
+        if(dstf < srcf && f <= dstf && f > srcf)
+            return false;
+        return true;
+    case DIR_N:
+    case DIR_S:
+        if(r != srcf)
+            return false;
+        if(srcr < dstr && r < srcr && r >= dstr)
+            return false;
+        if(dstr < srcr && r <= dstr && r > srcr)
+            return false;
+        return true;
+    default:
+        if(r - srcr != f - srcf)
+            return false;
+
+        if(srcf < dstf && f < srcf && f >= dstf)
+            return false;
+        if(dstf < srcf && f <= dstf && f > srcf)
+            return false;
+        if(srcr < dstr && r < srcr && r >= dstr)
+            return false;
+        if(dstr < srcr && r <= dstr && r > srcr)
+            return false;
+
+        return true;
+    }
+}
+
 static bool move_islegal(board_t* board, move_t move)
 {
     uint8_t dcur;
+    pinline_t *curpin;
 
     uint8_t src, dst, type, dstart, dend;
     team_e team;
@@ -653,21 +702,22 @@ static bool move_islegal(board_t* board, move_t move)
             }
         }
 
-        printf("start, end: %d %d\n", dstart, dend);
-
         for(dcur=dstart; dcur<=dend; dcur++)
         {
             *((uint64_t*)dstbits) = 0;
             dstbits[dcur / BOARD_LEN] |= 1 << (dcur % BOARD_LEN);
-
-            board_printbits(dstbits);
-            board_printbits(board->attacks[!team]);
 
             if(*((uint64_t*)dstbits) & *((uint64_t*)board->attacks[!team]))
                 return false;
         }
 
         return true;
+    }
+
+    for(curpin=board->pins[!team]; curpin; curpin=curpin->next)
+    {
+        if(move_sqrinpin(curpin, src) && !move_sqrinpin(curpin, dst))
+            return false;
     }
 
     return true;
