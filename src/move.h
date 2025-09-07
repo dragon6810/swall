@@ -3,19 +3,6 @@
 
 #include "board.h"
 
-typedef enum
-{
-    DIR_E=0,
-    DIR_N,
-    DIR_W,
-    DIR_S,
-    DIR_NE,
-    DIR_NW,
-    DIR_SW,
-    DIR_SE,
-    DIR_COUNT,
-} dir_e;
-
 static const int diroffs[DIR_COUNT] = 
 {
     1,
@@ -54,6 +41,9 @@ typedef struct moveset_s
 } moveset_t;
 
 void move_domove(board_t* board, move_t move);
+void move_findattacks(board_t* board);
+// doesn't clear existing pins
+void move_findpins(board_t* board);
 moveset_t* move_legalmoves(board_t* board, uint8_t src);
 // ignores input flags, fills output flags
 move_t* move_findmove(moveset_t* set, move_t move);

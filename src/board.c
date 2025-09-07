@@ -5,6 +5,33 @@
 #include <stdlib.h>
 #include <string.h>
 
+void board_findpieces(board_t* board)
+{
+    int i;
+
+    team_e team;
+
+    board->npieces[TEAM_WHITE] = board->npieces[TEAM_BLACK] = 0;
+
+    for(i=0; i<BOARD_AREA; i++)
+    {
+        if(!(board->pieces[i] & PIECE_MASK_TYPE))
+            continue;
+
+        team = TEAM_WHITE;
+        if(board->pieces[i] & PIECE_MASK_COLOR)
+            team = TEAM_BLACK;
+
+        if(board->npieces[team] >= PIECE_MAX)
+        {
+            printf("board_findpieces: max pieces reached! max is %d.\n", PIECE_MAX);
+            exit(1);
+        }
+
+        board->quickp[team][board->npieces[team]++] = i;
+    }
+}
+
 void board_print(const board_t* board)
 {
     int i, r, f;
