@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "board.h"
+#include "move.h"
 
 #define MAX_INPUT 64
 
@@ -14,10 +15,11 @@ int main(int argc, char** argv)
     char buf[MAX_INPUT];
     char movestr[2][3];
     int r, f;
-    bitboard_t moves;
-    move_t move;
+    uint8_t sqrs[2];
+    moveset_t *moves;
 
-    board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    //board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/8/RNBQKBNR w KQkq - 0 1");
 
     board_print(&board);
 
@@ -59,12 +61,15 @@ int main(int argc, char** argv)
             {
                 r = movestr[i][1] - '1';
                 f = movestr[i][0] - 'a';
-                move[i] = r * BOARD_LEN + f;
+                sqrs[i] = r * BOARD_LEN + f;
             }
 
-            board_getlegal(&board, move[0], moves);
-            board_printbits(moves);
+            moves = move_legalmoves(&board, sqrs[0]);
+            move_printset(moves);
+            move_freeset(moves);
+            moves = NULL;
             
+            /*
             if(~moves[r] & (1 << f))
             {
                 printf("invalid move.\n");
@@ -74,6 +79,7 @@ int main(int argc, char** argv)
             board.pieces[move[1]] = board.pieces[move[0]];
             board.pieces[move[0]] = 0;
             board_print(&board);
+            */
 
             continue;
         }

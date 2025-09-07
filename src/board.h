@@ -14,18 +14,6 @@
 
 typedef enum
 {
-    DIR_E=0,
-    DIR_N,
-    DIR_W,
-    DIR_S,
-    DIR_NE,
-    DIR_NW,
-    DIR_SW,
-    DIR_SE,
-} dir_e;
-
-typedef enum
-{
     PIECE_NONE=0,
     PIECE_KING,
     PIECE_QUEEN,
@@ -38,18 +26,23 @@ typedef enum
 // 0000 (0 = white, 1 = black) type
 typedef uint8_t piece_t;
 
-// src, dst
-typedef uint8_t move_t[2];
+typedef enum
+{
+    TEAM_WHITE=0,
+    TEAM_BLACK,
+    TEAM_COUNT,
+} team_e;
 
 typedef struct board_s
 {
-    // i = (rank - 1) * BOARD_LEN + (file - 1)
+    // row-major, could bit pack in the future since each peaces is one nibble.
     piece_t pieces[BOARD_AREA];
     
-    bool blackmove; // if false, white to move.
+    team_e tomove;
 
-    // bool kcastle[2];
-    // bool qcastle[2];
+    uint8_t enpas; // on the last move, did a pawn just move two squares? if so, the target. else 0xFF
+    bool kcastle[TEAM_COUNT]; // starts at true, false if the team's kingside rook moves
+    bool qcastle[TEAM_COUNT]; // starts at true, false if the team's queenside rook moves
 } board_t;
 
 // if you want to make the board not 8x8, this will need changing
@@ -58,6 +51,5 @@ typedef uint8_t bitboard_t[BOARD_LEN];
 void board_print(const board_t* board);
 void board_printbits(const bitboard_t bits);
 void board_loadfen(board_t* board, const char* fen);
-void board_getlegal(board_t* board, uint8_t src, bitboard_t outbits);
 
 #endif
