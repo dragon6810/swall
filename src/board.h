@@ -48,10 +48,11 @@ typedef enum
     DIR_COUNT,
 } dir_e;
 
-typedef struct pline_s
+typedef struct pinline_s
 {
     uint8_t start, end;
     dir_e dir;
+    struct pinline_s *next;
 } pinline_t;
 
 // if you want to make the board not 8x8, this will need changing
@@ -76,6 +77,7 @@ typedef struct board_s
 } board_t;
 
 void board_findpieces(board_t* board);
+void board_freepins(board_t* board);
 void board_print(const board_t* board);
 void board_printbits(const bitboard_t bits);
 void board_loadfen(board_t* board, const char* fen);

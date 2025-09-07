@@ -71,6 +71,8 @@ void move_domove(board_t* board, move_t move)
 
     board_findpieces(board);
     move_findattacks(board);
+    board_freepins(board);
+    move_findpins(board);
 }
 
 // 0 <= idx < 8
@@ -351,17 +353,84 @@ void move_findattacks(board_t* board)
                 break;
             }
         }
-
-        printf("atk %d:\n", i);
-        board_printbits(board->attacks[i]);
     }
+}
+
+static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
+{
+    int i;
+
+    int idx;
+    int max;
+    int crossed;
+    pinline_t *newline;
+
+    max = move_maxsweep(dir, src);
+    for(i=0, idx=src+diroffs[dir], crossed=0; i<max; i++, idx+=diroffs[dir])
+    {
+        if(!(board->pieces[idx] & PIECE_MASK_TYPE))
+            continue;
+
+        // hit a friendly! en passant might mess this up.
+        if((board->pieces[idx] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR))
+            return;
+
+        if((board->pieces[idx] & PIECE_MASK_TYPE) == PIECE_KING)
+            break;
+
+        if(crossed)
+            return; // two enemies before the king
+        crossed++;
+    }
+
+    // edge of the board and no king
+    if(i >= max)
+        return;
+
+    newline = malloc(sizeof(pinline_t));
+    newline->start = src;
+    newline->end = idx - diroffs[dir];
+    newline->dir = dir;
+    newline->next = board->pins[team];
+    board->pins[team] = newline;
 }
 
 void move_findpins(board_t* board)
 {
+    int i, j;
+    dir_e dir;
 
+    dir_e start, end;
+
+    for(i=0; i<TEAM_COUNT; i++)
+    {
+        *((uint64_t*)&board->attacks[i]) = 0;
+        for(j=0; j<board->npieces[i]; j++)
+        {
+            switch(board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE)
+            {
+            case PIECE_QUEEN:
+                start = DIR_E;
+                end = DIR_COUNT;
+                break;
+            case PIECE_ROOK:
+                start = DIR_E;
+                end = DIR_NE;
+                break;
+            case PIECE_BISHOP:
+                start = DIR_NE;
+                end = DIR_COUNT;
+                break;
+            default:
+                start = end = 0;
+                break;
+            }
+
+            for(dir=start; dir<end; dir++)
+                move_sweeppin(board, i, dir, board->quickp[i][j]);
+        }
+    }
 }
-
 
 static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 {

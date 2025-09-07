@@ -22,6 +22,7 @@ int main(int argc, char** argv)
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     board_findpieces(&board);
     move_findattacks(&board);
+    move_findpins(&board);
 
     board_print(&board);
 
