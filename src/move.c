@@ -73,6 +73,41 @@ void move_domove(board_t* board, move_t move)
     move_findattacks(board);
 }
 
+// 0 <= idx < 8
+// -1 means invalid
+static int move_knightoffs(int idx, int src)
+{
+    int r, f;
+
+    dir_e dir;
+    int offs;
+
+    dir = idx >> 1;
+    offs = (idx & 1) * 2 - 1;
+
+    r = src / BOARD_LEN;
+    f = src % BOARD_LEN;
+
+    if(dir == DIR_E)
+        f += 2;
+    if(dir == DIR_N)
+        r += 2;
+    if(dir == DIR_W)
+        f -= 2;
+    if(dir == DIR_S)
+        r -= 2;
+
+    if(dir == DIR_E || dir == DIR_W)
+        r += offs;
+    if(dir == DIR_N || dir == DIR_S)
+        f += offs;
+
+    if(r < 0 || r >= BOARD_LEN || f < 0 || f >= BOARD_LEN)
+        return -1;
+
+    return r * BOARD_LEN + f;
+}
+
 static int move_maxsweep(dir_e dir, uint8_t src)
 {
     int r, f;
@@ -137,7 +172,8 @@ static moveset_t* move_sweep
     {
         // friendly
         if(((board->pieces[idx] & PIECE_MASK_TYPE) != PIECE_NONE)
-        && ((board->pieces[idx] & PIECE_MASK_COLOR) == (piece & PIECE_MASK_COLOR)))
+        && ((board->pieces[idx] & PIECE_MASK_COLOR) == (piece & PIECE_MASK_COLOR))
+        && !bits)
             break;
 
         // enemy, but we can't capture
@@ -167,6 +203,92 @@ static moveset_t* move_sweep
     return newset;
 }
 
+static void move_pawnatk(board_t* board, uint8_t src)
+{
+    int i;
+    
+    int f;
+    team_e team;
+    int dst;
+    dir_e dirs[2];
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
+    if(team == TEAM_WHITE)
+    {
+        dirs[0] = DIR_NE;
+        dirs[1] = DIR_NW;
+    }
+    else
+    {
+        dirs[0] = DIR_SE;
+        dirs[1] = DIR_SW;
+    }
+
+    f = src % BOARD_LEN;
+    for(i=0; i<2; i++)
+    {
+        if(!i && f == BOARD_LEN-1)
+            continue;
+        if(i && !f)
+            continue;
+
+        dst = src + diroffs[dirs[i]];
+        board->attacks[team][dst / BOARD_LEN] |= 1 << (dst % BOARD_LEN);
+    }
+}
+
+static void move_knightatk(board_t* board, uint8_t src)
+{
+    int i;
+    
+    team_e team;
+    int dst;
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
+    for(i=0; i<8; i++)
+    {
+        dst = move_knightoffs(i, src);
+        if(dst < 0)
+            continue;
+
+        board->attacks[team][dst / BOARD_LEN] |= 1 << (dst % BOARD_LEN);
+    }
+}
+
+static void move_bishopatk(board_t* board, uint8_t src)
+{
+    int i;
+    
+    team_e team;
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
+    for(i=DIR_NE; i<DIR_COUNT; i++)
+        move_sweep(NULL, board->attacks[team], board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+}
+
+static void move_rookatk(board_t* board, uint8_t src)
+{
+    int i;
+    
+    team_e team;
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
+    for(i=0; i<DIR_NE; i++)
+        move_sweep(NULL, board->attacks[team], board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+}
+
 static void move_queenatk(board_t* board, uint8_t src)
 {
     int i;
@@ -181,6 +303,21 @@ static void move_queenatk(board_t* board, uint8_t src)
         move_sweep(NULL, board->attacks[team], board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
 }
 
+static void move_kingatk(board_t* board, uint8_t src)
+{
+    int i;
+    
+    team_e team;
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
+    for(i=0; i<DIR_COUNT; i++)
+        if(move_maxsweep(i, src))
+            move_sweep(NULL, board->attacks[team], board, src, i, 1, false, MOVETYPE_DEFAULT);
+}
+
 void move_findattacks(board_t* board)
 {
     int i, j;
@@ -192,8 +329,23 @@ void move_findattacks(board_t* board)
         {
             switch(board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE)
             {
+            case PIECE_KING:
+                move_kingatk(board, board->quickp[i][j]);
+                break;
             case PIECE_QUEEN:
                 move_queenatk(board, board->quickp[i][j]);
+                break;
+            case PIECE_ROOK:
+                move_rookatk(board, board->quickp[i][j]);
+                break;
+            case PIECE_BISHOP:
+                move_bishopatk(board, board->quickp[i][j]);
+                break;
+            case PIECE_KNIGHT:
+                move_knightatk(board, board->quickp[i][j]);
+                break;
+            case PIECE_PAWN:
+                move_pawnatk(board, board->quickp[i][j]);
                 break;
             default:
                 break;
@@ -297,46 +449,27 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 
 static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
 {
-    int i, j;
+    int i;
 
-    int r, f, dst;
+    int dst;
     moveset_t *move;
-
-    for(i=0; i<DIR_NE; i++)
+    
+    for(i=0; i<8; i++)
     {
-        for(j=-1; j<=1; j+=2)
-        {
-            r = src / BOARD_LEN;
-            f = src % BOARD_LEN;
+        dst = move_knightoffs(i, src);
+        if(dst < 0)
+            continue;
 
-            if(i == DIR_E)
-                f += 2;
-            if(i == DIR_N)
-                r += 2;
-            if(i == DIR_W)
-                f -= 2;
-            if(i == DIR_S)
-                r -= 2;
+        if((board->pieces[dst] & PIECE_MASK_TYPE) != PIECE_NONE
+        && ((board->pieces[dst] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR)))
+            continue;
 
-            if(i == DIR_E || i == DIR_W)
-                r += j;
-            if(i == DIR_N || i == DIR_S)
-                f += j;
-
-            if(r < 0 || r >= BOARD_LEN || f < 0 || f >= BOARD_LEN)
-                continue;
-            dst = r * BOARD_LEN + f;
-            if((board->pieces[dst] & PIECE_MASK_TYPE) != PIECE_NONE
-            && ((board->pieces[dst] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR)))
-                continue;
-
-            move = malloc(sizeof(moveset_t));
-            move->move = 0;
-            move->move |= src;
-            move->move |= dst << MOVEBITS_DST_BITS;
-            move->next = set;
-            set = move;
-        }
+        move = malloc(sizeof(moveset_t));
+        move->move = 0;
+        move->move |= src;
+        move->move |= dst << MOVEBITS_DST_BITS;
+        move->next = set;
+        set = move;
     }
 
     return set;
