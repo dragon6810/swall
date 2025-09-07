@@ -100,6 +100,53 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
     return set;
 }
 
+static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
+{
+    int i, j;
+
+    int r, f, dst;
+    moveset_t *move;
+
+    for(i=0; i<DIR_NE; i++)
+    {
+        for(j=-1; j<=1; j+=2)
+        {
+            r = src / BOARD_LEN;
+            f = src % BOARD_LEN;
+
+            if(i == DIR_E)
+                f += 2;
+            if(i == DIR_N)
+                r += 2;
+            if(i == DIR_W)
+                f -= 2;
+            if(i == DIR_S)
+                r -= 2;
+
+            if(i == DIR_E || i == DIR_W)
+                r += j;
+            if(i == DIR_N || i == DIR_S)
+                f += j;
+
+            if(r < 0 || r >= BOARD_LEN || f < 0 || f >= BOARD_LEN)
+                continue;
+            dst = r * BOARD_LEN + f;
+            if((board->pieces[dst] & PIECE_MASK_TYPE) != PIECE_NONE
+            && ((board->pieces[dst] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR)))
+                continue;
+
+            move = malloc(sizeof(moveset_t));
+            move->move = 0;
+            move->move |= src;
+            move->move |= dst << MOVEBITS_DST_BITS;
+            move->next = set;
+            set = move;
+        }
+    }
+
+    return set;
+}
+
 static moveset_t* move_bishopmoves(moveset_t* set, board_t* board, uint8_t src)
 {
     int i;
@@ -157,7 +204,7 @@ moveset_t* move_legalmoves(board_t* board, uint8_t src)
     case PIECE_BISHOP:
         return move_bishopmoves(NULL, board, src);
     case PIECE_KNIGHT:
-        return NULL;
+        return move_knightmoves(NULL, board, src);
     case PIECE_PAWN:
         return move_pawnmoves(NULL, board, src);
     default:
