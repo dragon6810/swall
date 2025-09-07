@@ -79,6 +79,34 @@ int main(int argc, char** argv)
                 continue;
             }
 
+            if((*pmove >> MOVEBITS_TYP_BITS) >= MOVETYPE_PROMQ
+            && (*pmove >> MOVEBITS_TYP_BITS) <= MOVETYPE_PROMN)
+            {
+                *pmove &= ~MOVEBITS_TYP_MASK;
+
+                printf("what piece would you like to promote to?\n");
+                printf("type \"queen\", \"rook\", \"bishop\", or \"knight\".\n");
+
+                fgets(buf, MAX_INPUT, stdin);
+                buf[strlen(buf) - 1] = 0; // chop off \n
+                
+                if(!strcmp(buf, "queen"))
+                    *pmove |= ((uint16_t)MOVETYPE_PROMQ) << MOVEBITS_TYP_BITS;
+                else if(!strcmp(buf, "rook"))
+                    *pmove |= ((uint16_t)MOVETYPE_PROMR) << MOVEBITS_TYP_BITS;
+                else if(!strcmp(buf, "bishop"))
+                    *pmove |= ((uint16_t)MOVETYPE_PROMB) << MOVEBITS_TYP_BITS;
+                else if(!strcmp(buf, "knight"))
+                    *pmove |= ((uint16_t)MOVETYPE_PROMN) << MOVEBITS_TYP_BITS;
+                else
+                {
+                    printf("invalid promotion option.\n");
+                    move_freeset(moves);
+                    moves = NULL;
+                    continue;
+                }
+            }
+
             move_domove(&board, *pmove);
 
             board_print(&board);
