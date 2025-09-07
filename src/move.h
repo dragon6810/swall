@@ -53,6 +53,7 @@ typedef struct moveset_s
     struct moveset_s *next;
 } moveset_t;
 
+void move_domove(board_t* board, move_t move);
 moveset_t* move_legalmoves(board_t* board, uint8_t src);
 bool move_findmove(moveset_t* set, move_t move);
 void move_printset(moveset_t* set);

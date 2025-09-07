@@ -79,8 +79,8 @@ int main(int argc, char** argv)
                 continue;
             }
 
-            board.pieces[sqrs[1]] = board.pieces[sqrs[0]];
-            board.pieces[sqrs[0]] = 0;
+            move_domove(&board, move);
+            
             board_print(&board);
 
             move_freeset(moves);
