@@ -404,7 +404,6 @@ void move_findpins(board_t* board)
 
     for(i=0; i<TEAM_COUNT; i++)
     {
-        *((uint64_t*)&board->attacks[i]) = 0;
         for(j=0; j<board->npieces[i]; j++)
         {
             switch(board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE)
@@ -619,28 +618,101 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
     return set;
 }
 
+static bool move_islegal(board_t* board, move_t move)
+{
+    uint8_t src, dst;
+    team_e team;
+    bitboard_t dstbits;
+
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    // type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
+    if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_KING)
+    {
+        *((uint64_t*)dstbits) = 0;
+        dstbits[dst / BOARD_LEN] |= 1 << (dst % BOARD_LEN);
+
+        board_printbits(dstbits);
+        board_printbits(board->attacks[!team]);
+
+        if(*((uint64_t*)dstbits) & *((uint64_t*)board->attacks[!team]))
+            return false;
+        return true;
+    }
+
+    return true;
+}
+
+static moveset_t* move_filterset(board_t* board, moveset_t* moves)
+{
+    moveset_t *cur, *next;
+
+    moveset_t *newset;
+
+    newset = NULL;
+
+    cur = moves;
+    while(cur)
+    {
+        next = cur->next;
+
+        if(!move_islegal(board, cur->move))
+        {
+            free(cur);
+            cur = next;
+            continue;
+        }
+
+        cur->next = newset;
+        newset = cur;
+
+        cur = next;
+    }
+
+    return newset;
+}
+
 moveset_t* move_legalmoves(board_t* board, uint8_t src)
 {
     piece_e type;
+
+    moveset_t* moves;
+
+    moves = NULL;
 
     type = board->pieces[src] & PIECE_MASK_TYPE;
     switch(type)
     {
     case PIECE_KING:
-        return move_kingmoves(NULL, board, src);
+        moves = move_kingmoves(moves, board, src);
+        break;
     case PIECE_QUEEN:
-        return move_queenmoves(NULL, board, src);
+        moves = move_queenmoves(moves, board, src);
+        break;
     case PIECE_ROOK:
-        return move_rookmoves(NULL, board, src);
+        moves = move_rookmoves(moves, board, src);
+        break;
     case PIECE_BISHOP:
-        return move_bishopmoves(NULL, board, src);
+        moves = move_bishopmoves(moves, board, src);
+        break;
     case PIECE_KNIGHT:
-        return move_knightmoves(NULL, board, src);
+        moves = move_knightmoves(moves, board, src);
+        break;
     case PIECE_PAWN:
-        return move_pawnmoves(NULL, board, src);
+        moves = move_pawnmoves(moves, board, src);
+        break;
     default:
-        return NULL;
+        moves = NULL;
+        break;
     }
+
+    moves = move_filterset(board, moves);
+    return moves;
 }
 
 move_t* move_findmove(moveset_t* set, move_t move)
