@@ -79,23 +79,90 @@ static moveset_t* move_sweep(moveset_t* set, board_t* board, uint8_t src, dir_e 
     return newset;
 }
 
+static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
+{
+    int max;
+    dir_e dir;
+
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+    {
+        max = (src / BOARD_LEN == BOARD_LEN - 2) + 1;
+        dir = DIR_S;
+    }
+    else
+    {
+        max = (src / BOARD_LEN == 1) + 1;
+        dir = DIR_N;
+    }
+
+    set = move_sweep(set, board, src, dir, max);
+
+    return set;
+}
+
+static moveset_t* move_bishopmoves(moveset_t* set, board_t* board, uint8_t src)
+{
+    int i;
+
+    for(i=DIR_NE; i<DIR_COUNT; i++)
+        set = move_sweep(set, board, src, i, move_maxsweep(i, src));
+
+    return set;
+}
+
+static moveset_t* move_rookmoves(moveset_t* set, board_t* board, uint8_t src)
+{
+    int i;
+
+    for(i=0; i<DIR_NE; i++)
+        set = move_sweep(set, board, src, i, move_maxsweep(i, src));
+
+    return set;
+}
+
+static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
+{
+    int i;
+
+    for(i=0; i<DIR_COUNT; i++)
+        if(move_maxsweep(i, src))
+            set = move_sweep(set, board, src, i, 1);
+
+    return set;
+}
+
 static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
 {
     int i;
 
-    moveset_t *newset;
-
-    newset = set;
-
     for(i=0; i<DIR_COUNT; i++)
-        newset = move_sweep(newset, board, src, i, move_maxsweep(i, src));
+        set = move_sweep(set, board, src, i, move_maxsweep(i, src));
 
-    return newset;
+    return set;
 }
 
 moveset_t* move_legalmoves(board_t* board, uint8_t src)
 {
-    return move_queenmoves(NULL, board, src);
+    piece_e type;
+
+    type = board->pieces[src] & PIECE_MASK_TYPE;
+    switch(type)
+    {
+    case PIECE_KING:
+        return move_kingmoves(NULL, board, src);
+    case PIECE_QUEEN:
+        return move_queenmoves(NULL, board, src);
+    case PIECE_ROOK:
+        return move_rookmoves(NULL, board, src);
+    case PIECE_BISHOP:
+        return move_bishopmoves(NULL, board, src);
+    case PIECE_KNIGHT:
+        return NULL;
+    case PIECE_PAWN:
+        return move_pawnmoves(NULL, board, src);
+    default:
+        return NULL;
+    }
 }
 
 void move_printset(moveset_t* set)
