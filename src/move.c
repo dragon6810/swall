@@ -6,21 +6,54 @@
 void move_domove(board_t* board, move_t move)
 {
     int type, src, dst;
+    piece_t piece;
+    team_e team;
+    piece_e ptype;
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+    piece = board->pieces[src];
+    team = TEAM_WHITE;
+    if(piece & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+    ptype = piece & PIECE_MASK_TYPE;
 
     // double pawn push
     board->enpas = 0xFF;
     if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_PAWN
     && abs(dst - src) == BOARD_LEN * 2)
         board->enpas = dst;
-    
+
+    if(ptype == PIECE_KING)
+        board->kcastle[team] = board->qcastle[team] = false;
+    if(ptype == PIECE_ROOK)
+    {
+        if(src % BOARD_LEN == BOARD_LEN - 1)
+            board->kcastle[team] = false;
+        if(!(src % BOARD_LEN))
+            board->qcastle[team] = false;
+    }
+
     if(type == MOVETYPE_ENPAS)
         board->pieces[src / BOARD_LEN * BOARD_LEN + dst % BOARD_LEN] = 0;
+    if(type == MOVETYPE_CASTLE)
+    {
+        // kingside
+        if(dst > src)
+        {
+            board->pieces[dst - 1] = board->pieces[dst + 1];
+            board->pieces[dst + 1] = 0;
+        }
+        // queenside
+        else
+        {
+            board->pieces[dst + 1] = board->pieces[dst - 2];
+            board->pieces[dst - 2] = 0;
+        }
+    }
 
-    board->pieces[dst] = board->pieces[src];
+    board->pieces[dst] = piece;
     board->pieces[src] = 0;
 }
 
@@ -240,9 +273,43 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
 {
     int i;
 
+    team_e team;
+    moveset_t *move;
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
     for(i=0; i<DIR_COUNT; i++)
         if(move_maxsweep(i, src))
             set = move_sweep(set, board, src, i, 1, false);
+
+    if(board->kcastle[team] 
+    && !(board->pieces[src+1] & PIECE_MASK_TYPE)
+    && !(board->pieces[src+2] & PIECE_MASK_TYPE))
+    {
+        move = malloc(sizeof(moveset_t));
+        move->move = 0;
+        move->move |= src;
+        move->move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
+        move->move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+        move->next = set;
+        set = move;
+    }
+
+    if(board->qcastle[team] 
+    && !(board->pieces[src-1] & PIECE_MASK_TYPE)
+    && !(board->pieces[src-2] & PIECE_MASK_TYPE)
+    && !(board->pieces[src-3] & PIECE_MASK_TYPE))
+    {
+        move = malloc(sizeof(moveset_t));
+        move->move = 0;
+        move->move |= src;
+        move->move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
+        move->move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+        move->next = set;
+        set = move;
+    }
 
     return set;
 }
