@@ -6,7 +6,7 @@
 void move_domove(board_t* board, move_t move)
 {
     int type, src, dst;
-    piece_t piece;
+    piece_t piece, newp;
     team_e team;
     piece_e ptype;
 
@@ -53,7 +53,21 @@ void move_domove(board_t* board, move_t move)
         }
     }
 
-    board->pieces[dst] = piece;
+    
+    switch(type)
+    {
+    case MOVETYPE_PROMQ:
+    case MOVETYPE_PROMR:
+    case MOVETYPE_PROMB:
+    case MOVETYPE_PROMN:
+        newp = piece & PIECE_MASK_COLOR;
+        newp |= PIECE_QUEEN + type - MOVETYPE_PROMQ;
+        break;
+    default:
+        newp = piece;
+    }
+
+    board->pieces[dst] = newp;
     board->pieces[src] = 0;
 }
 
@@ -96,7 +110,7 @@ static int move_maxsweep(dir_e dir, uint8_t src)
     }
 }
 
-static moveset_t* move_sweep(moveset_t* set, board_t* board, uint8_t src, dir_e dir, int max, bool nocapture)
+static moveset_t* move_sweep(moveset_t* set, board_t* board, uint8_t src, dir_e dir, int max, bool nocapture, movetype_e type)
 {
     int i;
 
@@ -126,6 +140,7 @@ static moveset_t* move_sweep(moveset_t* set, board_t* board, uint8_t src, dir_e 
         newmove->move = 0;
         newmove->move |= src;
         newmove->move |= idx << MOVEBITS_DST_BITS;
+        newmove->move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
         newmove->next = newset;
         newset = newmove;
 
@@ -140,13 +155,22 @@ static moveset_t* move_sweep(moveset_t* set, board_t* board, uint8_t src, dir_e 
 static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 {
     int i;
+    int type;
 
     int max, dst;
+    int starttype, stoptype;
     dir_e dir, atk[2];
     moveset_t *move;
 
+    starttype = stoptype = MOVETYPE_DEFAULT;
+
     if(board->pieces[src] & PIECE_MASK_COLOR)
     {
+        if(src / BOARD_LEN == 1)
+        {
+            starttype = MOVETYPE_PROMQ;
+            stoptype = MOVETYPE_PROMN;
+        }
         max = (src / BOARD_LEN == BOARD_LEN - 2) + 1;
         dir = DIR_S;
         atk[0] = DIR_SW;
@@ -154,13 +178,19 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
     }
     else
     {
+        if(src / BOARD_LEN == BOARD_LEN-2)
+        {
+            starttype = MOVETYPE_PROMQ;
+            stoptype = MOVETYPE_PROMN;
+        }
         max = (src / BOARD_LEN == 1) + 1;
         dir = DIR_N;
         atk[0] = DIR_NW;
         atk[1] = DIR_NE;
     }
 
-    set = move_sweep(set, board, src, dir, max, true);
+    for(type=starttype; type<=stoptype; type++)
+        set = move_sweep(set, board, src, dir, max, true, type);
 
     for(i=0; i<2; i++)
     {
@@ -191,12 +221,16 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
         || (board->pieces[dst] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR))
             continue;
         
-        move = malloc(sizeof(moveset_t));
-        move->move = 0;
-        move->move |= src;
-        move->move |= dst << MOVEBITS_DST_BITS;
-        move->next = set;
-        set = move;
+        for(type=starttype; type<=stoptype; type++)
+        {
+            move = malloc(sizeof(moveset_t));
+            move->move = 0;
+            move->move |= src;
+            move->move |= dst << MOVEBITS_DST_BITS;
+            move->move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
+            move->next = set;
+            set = move;
+        }
     }
 
     return set;
@@ -254,7 +288,7 @@ static moveset_t* move_bishopmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        set = move_sweep(set, board, src, i, move_maxsweep(i, src), false);
+        set = move_sweep(set, board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
 
     return set;
 }
@@ -264,7 +298,7 @@ static moveset_t* move_rookmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=0; i<DIR_NE; i++)
-        set = move_sweep(set, board, src, i, move_maxsweep(i, src), false);
+        set = move_sweep(set, board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
 
     return set;
 }
@@ -282,7 +316,7 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
 
     for(i=0; i<DIR_COUNT; i++)
         if(move_maxsweep(i, src))
-            set = move_sweep(set, board, src, i, 1, false);
+            set = move_sweep(set, board, src, i, 1, false, MOVETYPE_DEFAULT);
 
     if(board->kcastle[team] 
     && !(board->pieces[src+1] & PIECE_MASK_TYPE)
@@ -319,7 +353,7 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=0; i<DIR_COUNT; i++)
-        set = move_sweep(set, board, src, i, move_maxsweep(i, src), false);
+        set = move_sweep(set, board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
 
     return set;
 }
