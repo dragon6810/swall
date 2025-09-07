@@ -16,10 +16,10 @@ int main(int argc, char** argv)
     char movestr[2][3];
     int r, f;
     uint8_t sqrs[2];
+    move_t move;
     moveset_t *moves;
 
-    //board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/8/RNBQKBNR w KQkq - 0 1");
+    board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
     board_print(&board);
 
@@ -64,22 +64,27 @@ int main(int argc, char** argv)
                 sqrs[i] = r * BOARD_LEN + f;
             }
 
+            move = 0;
+            move |= sqrs[0];
+            move |= ((uint16_t) sqrs[1]) << MOVEBITS_DST_BITS;
+
             moves = move_legalmoves(&board, sqrs[0]);
             move_printset(moves);
-            move_freeset(moves);
-            moves = NULL;
             
-            /*
-            if(~moves[r] & (1 << f))
+            if(!move_findmove(moves, move))
             {
                 printf("invalid move.\n");
+                move_freeset(moves);
+                moves = NULL;
                 continue;
             }
 
-            board.pieces[move[1]] = board.pieces[move[0]];
-            board.pieces[move[0]] = 0;
+            board.pieces[sqrs[1]] = board.pieces[sqrs[0]];
+            board.pieces[sqrs[0]] = 0;
             board_print(&board);
-            */
+
+            move_freeset(moves);
+            moves = NULL;
 
             continue;
         }

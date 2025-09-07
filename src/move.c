@@ -165,6 +165,21 @@ moveset_t* move_legalmoves(board_t* board, uint8_t src)
     }
 }
 
+bool move_findmove(moveset_t* set, move_t move)
+{
+    moveset_t *cur;
+
+    cur = set;
+    while(cur)
+    {
+        if(cur->move == move)
+            return true;
+        cur = cur->next;
+    }
+
+    return false;
+}
+
 void move_printset(moveset_t* set)
 {
     int r, f;

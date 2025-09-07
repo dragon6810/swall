@@ -54,6 +54,7 @@ typedef struct moveset_s
 } moveset_t;
 
 moveset_t* move_legalmoves(board_t* board, uint8_t src);
+bool move_findmove(moveset_t* set, move_t move);
 void move_printset(moveset_t* set);
 void move_freeset(moveset_t* set);
 
