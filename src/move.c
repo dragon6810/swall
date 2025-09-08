@@ -366,13 +366,12 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
 
     int idx;
     int max;
-    int crossed;
     pinline_t line;
 
     memset(&line, 0, sizeof(pinline_t));
 
     max = sweeptable[src][dir];
-    for(i=0, idx=src+diroffs[dir], crossed=0; i<max; i++, idx+=diroffs[dir])
+    for(i=0, idx=src+diroffs[dir], line.nblocks=0; i<max; i++, idx+=diroffs[dir])
     {
         line.bits[idx / BOARD_LEN] |= 1 << (idx % BOARD_LEN);
         if(!(board->pieces[idx] & PIECE_MASK_TYPE))
@@ -385,9 +384,9 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
         if((board->pieces[idx] & PIECE_MASK_TYPE) == PIECE_KING)
             break;
 
-        if(crossed)
+        if(line.nblocks)
             return; // two enemies before the king
-        crossed++;
+        line.nblocks++;
     }
 
     // edge of the board and no king
@@ -692,7 +691,16 @@ static bool move_islegal(board_t* board, move_t move)
 
     for(i=0, curpin=board->pins[!team]; i<board->npins[!team]; i++, curpin++)
     {
-        if(move_sqrinpin(curpin, src) && !move_sqrinpin(curpin, dst))
+        // we're capturing the source, so don't worry about it.
+        if(dst == curpin->start)
+            continue;
+
+        // leaving an open pin open.
+        if(!curpin->nblocks && !move_sqrinpin(curpin, dst))
+            return false;
+
+        // stepping out of a pin we were in.
+        if(curpin->nblocks && move_sqrinpin(curpin, src) && !move_sqrinpin(curpin, dst))
             return false;
     }
 

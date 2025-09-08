@@ -54,6 +54,7 @@ typedef uint8_t bitboard_t[BOARD_LEN];
 typedef struct pinline_s
 {
     uint8_t start, end;
+    int nblocks; // the number of blocking pieces in the way, should be 0 or 1
     bitboard_t bits;
 } pinline_t;
 
