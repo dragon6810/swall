@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 int sweeptable[BOARD_AREA][DIR_COUNT];
 
@@ -26,7 +27,7 @@ void move_domove(board_t* board, move_t move)
     board->enpas = 0xFF;
     if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_PAWN
     && abs(dst - src) == BOARD_LEN * 2)
-        board->enpas = dst;
+        board->enpas = dst + (team == TEAM_WHITE ? diroffs[DIR_S] : diroffs[DIR_N]);
 
     if(ptype == PIECE_KING)
         board->kcastle[team] = board->qcastle[team] = false;
@@ -36,6 +37,14 @@ void move_domove(board_t* board, move_t move)
             board->kcastle[team] = false;
         if(!(src % BOARD_LEN))
             board->qcastle[team] = false;
+    }
+
+    if((board->pieces[dst] & PIECE_MASK_TYPE) == PIECE_ROOK)
+    {
+        if(dst % BOARD_LEN == BOARD_LEN - 1)
+            board->kcastle[!team] = false;
+        if(!(dst % BOARD_LEN))
+            board->qcastle[!team] = false;
     }
 
     if(type == MOVETYPE_ENPAS)
@@ -112,45 +121,6 @@ static int move_knightoffs(int idx, int src)
         return -1;
 
     return r * BOARD_LEN + f;
-}
-
-static int move_maxsweep(dir_e dir, uint8_t src)
-{
-    int r, f;
-    int dsts[DIR_NE];
-
-    r = src / BOARD_LEN;
-    f = src % BOARD_LEN;
-
-    dsts[DIR_E] = BOARD_LEN - (f + 1);
-    dsts[DIR_N] = BOARD_LEN - (r + 1);
-    dsts[DIR_W] = f;
-    dsts[DIR_S] = r;
-
-    if(dir < DIR_NE)
-        return dsts[dir];
-
-    switch(dir)
-    {
-    case DIR_NE:
-        if(dsts[DIR_E] < dsts[DIR_N])
-            return dsts[DIR_E];
-        return dsts[DIR_N];
-    case DIR_NW:
-        if(dsts[DIR_N] < dsts[DIR_W])
-            return dsts[DIR_N];
-        return dsts[DIR_W];
-    case DIR_SW:
-        if(dsts[DIR_W] < dsts[DIR_S])
-            return dsts[DIR_W];
-        return dsts[DIR_S];
-    case DIR_SE:
-        if(dsts[DIR_S] < dsts[DIR_E])
-            return dsts[DIR_S];
-        return dsts[DIR_E];
-    default:
-        return -1;
-    }
 }
 
 // if bits is not null, it will ignore set and fill out the bitboard
@@ -490,9 +460,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 
         dst = src + diroffs[atk[i]];
 
-        // en passant requites board->enpas have rank of src and file of dst
-        if(board->enpas / BOARD_LEN == src / BOARD_LEN
-        && board->enpas % BOARD_LEN == dst % BOARD_LEN)
+        if(board->enpas == dst)
         {
             move = malloc(sizeof(moveset_t));
             move->move = 0;
@@ -736,9 +704,14 @@ static moveset_t* move_filterset(board_t* board, moveset_t* moves)
     return newset;
 }
 
+double mspseudo = 0, mslegal = 0;
+
 moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
 {
     piece_e type;
+    clock_t start;
+
+    start = clock();
 
     type = board->pieces[src] & PIECE_MASK_TYPE;
     switch(type)
@@ -762,11 +735,14 @@ moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
         moves = move_pawnmoves(moves, board, src);
         break;
     default:
-        moves = NULL;
         break;
     }
+    mspseudo += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
+    start = clock();
     moves = move_filterset(board, moves);
+    mslegal += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
+    
     return moves;
 }
 
@@ -843,6 +819,45 @@ void move_freeset(moveset_t* set)
         next = cur->next;
         free(cur);
         cur = next;
+    }
+}
+
+static int move_maxsweep(dir_e dir, uint8_t src)
+{
+    int r, f;
+    int dsts[DIR_NE];
+
+    r = src / BOARD_LEN;
+    f = src % BOARD_LEN;
+
+    dsts[DIR_E] = BOARD_LEN - (f + 1);
+    dsts[DIR_N] = BOARD_LEN - (r + 1);
+    dsts[DIR_W] = f;
+    dsts[DIR_S] = r;
+
+    if(dir < DIR_NE)
+        return dsts[dir];
+
+    switch(dir)
+    {
+    case DIR_NE:
+        if(dsts[DIR_E] < dsts[DIR_N])
+            return dsts[DIR_E];
+        return dsts[DIR_N];
+    case DIR_NW:
+        if(dsts[DIR_N] < dsts[DIR_W])
+            return dsts[DIR_N];
+        return dsts[DIR_W];
+    case DIR_SW:
+        if(dsts[DIR_W] < dsts[DIR_S])
+            return dsts[DIR_W];
+        return dsts[DIR_S];
+    case DIR_SE:
+        if(dsts[DIR_S] < dsts[DIR_E])
+            return dsts[DIR_S];
+        return dsts[DIR_E];
+    default:
+        return -1;
     }
 }
 
