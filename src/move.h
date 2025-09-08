@@ -52,5 +52,6 @@ moveset_t* move_alllegal(board_t* board);
 move_t* move_findmove(moveset_t* set, move_t move);
 void move_printset(moveset_t* set);
 void move_freeset(moveset_t* set);
+void move_init(void);
 
 #endif

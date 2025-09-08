@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+int sweeptable[BOARD_AREA][DIR_COUNT];
+
 void move_domove(board_t* board, move_t move)
 {
     int type, src, dst;
@@ -276,7 +278,7 @@ static void move_bishopatk(board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        move_sweep(NULL, board->attacks[team], board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+        move_sweep(NULL, board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 }
 
 static void move_rookatk(board_t* board, uint8_t src)
@@ -290,7 +292,7 @@ static void move_rookatk(board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=0; i<DIR_NE; i++)
-        move_sweep(NULL, board->attacks[team], board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+        move_sweep(NULL, board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 }
 
 static void move_queenatk(board_t* board, uint8_t src)
@@ -304,7 +306,7 @@ static void move_queenatk(board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=0; i<DIR_COUNT; i++)
-        move_sweep(NULL, board->attacks[team], board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+        move_sweep(NULL, board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 }
 
 static void move_kingatk(board_t* board, uint8_t src)
@@ -318,7 +320,7 @@ static void move_kingatk(board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=0; i<DIR_COUNT; i++)
-        if(move_maxsweep(i, src))
+        if(sweeptable[src][i])
             move_sweep(NULL, board->attacks[team], board, src, i, 1, false, MOVETYPE_DEFAULT);
 }
 
@@ -367,7 +369,7 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
     int crossed;
     pinline_t *newline;
 
-    max = move_maxsweep(dir, src);
+    max = sweeptable[src][dir];
     for(i=0, idx=src+diroffs[dir], crossed=0; i<max; i++, idx+=diroffs[dir])
     {
         if(!(board->pieces[idx] & PIECE_MASK_TYPE))
@@ -550,7 +552,7 @@ static moveset_t* move_bishopmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        set = move_sweep(set, NULL, board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, NULL, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 
     return set;
 }
@@ -560,7 +562,7 @@ static moveset_t* move_rookmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=0; i<DIR_NE; i++)
-        set = move_sweep(set, NULL, board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, NULL, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 
     return set;
 }
@@ -577,7 +579,7 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=0; i<DIR_COUNT; i++)
-        if(move_maxsweep(i, src))
+        if(sweeptable[src][i])
             set = move_sweep(set, NULL, board, src, i, 1, false, MOVETYPE_DEFAULT);
 
     if(board->kcastle[team] 
@@ -615,7 +617,7 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=0; i<DIR_COUNT; i++)
-        set = move_sweep(set, NULL, board, src, i, move_maxsweep(i, src), false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, NULL, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 
     return set;
 }
@@ -862,4 +864,14 @@ void move_freeset(moveset_t* set)
         free(cur);
         cur = next;
     }
+}
+
+void move_init(void)
+{
+    int i;
+    dir_e dir;
+
+    for(i=0; i<BOARD_AREA; i++)
+        for(dir=0; dir<DIR_COUNT; dir++)
+            sweeptable[i][dir] = move_maxsweep(dir, i);
 }

@@ -20,6 +20,8 @@ int main(int argc, char** argv)
     move_t move, *pmove;
     moveset_t *moves;
 
+    move_init();
+
     tests_movegen();
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
