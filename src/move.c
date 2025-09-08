@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int sweeptable[BOARD_AREA][DIR_COUNT];
 
@@ -73,7 +74,6 @@ void move_domove(board_t* board, move_t move)
 
     board_findpieces(board);
     move_findattacks(board);
-    board_freepins(board);
     move_findpins(board);
 
     board->tomove = !board->tomove;
@@ -330,7 +330,7 @@ void move_findattacks(board_t* board)
 
     for(i=0; i<TEAM_COUNT; i++)
     {
-        *((uint64_t*)&board->attacks[i]) = 0;
+        *((uint64_t*)board->attacks[i]) = 0;
         for(j=0; j<board->npieces[i]; j++)
         {
             switch(board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE)
@@ -367,11 +367,14 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
     int idx;
     int max;
     int crossed;
-    pinline_t *newline;
+    pinline_t line;
+
+    memset(&line, 0, sizeof(pinline_t));
 
     max = sweeptable[src][dir];
     for(i=0, idx=src+diroffs[dir], crossed=0; i<max; i++, idx+=diroffs[dir])
     {
+        line.bits[idx / BOARD_LEN] |= 1 << (idx % BOARD_LEN);
         if(!(board->pieces[idx] & PIECE_MASK_TYPE))
             continue;
 
@@ -391,12 +394,15 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
     if(i >= max)
         return;
 
-    newline = malloc(sizeof(pinline_t));
-    newline->start = src;
-    newline->end = idx - diroffs[dir];
-    newline->dir = dir;
-    newline->next = board->pins[team];
-    board->pins[team] = newline;
+    if(board->npins[team] >= PIECE_MAX)
+    {
+        printf("move_sweeppin: max pins reached! max is %d.\n", PIECE_MAX);
+        exit(1);
+    }
+
+    line.start = src;
+    line.end = idx;
+    board->pins[team][board->npins[team]++] = line;
 }
 
 void move_findpins(board_t* board)
@@ -408,6 +414,7 @@ void move_findpins(board_t* board)
 
     for(i=0; i<TEAM_COUNT; i++)
     {
+        board->npins[i] = 0;
         for(j=0; j<board->npieces[i]; j++)
         {
             switch(board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE)
@@ -624,54 +631,19 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
 
 static bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
 {
-    int r, f, srcr, srcf, dstr, dstf;
+    bitboard_t sqrmask;
 
-    r = sqr / BOARD_LEN;
-    f = sqr % BOARD_LEN;
-    srcr = pin->start / BOARD_LEN;
-    srcf = pin->start % BOARD_LEN;
-    dstr = pin->end / BOARD_LEN;
-    dstf = pin->end % BOARD_LEN;
+    *((uint64_t*)sqrmask) = 0;
+    sqrmask[sqr / BOARD_LEN] |= 1 << (sqr % BOARD_LEN);
 
-    switch(pin->dir)
-    {
-    case DIR_E:
-    case DIR_W:
-        if(r != srcr)
-            return false;
-        if(srcf < dstf && f < srcf && f >= dstf)
-            return false;
-        if(dstf < srcf && f <= dstf && f > srcf)
-            return false;
+    if(*((uint64_t*)sqrmask) & *((uint64_t*)pin->bits))
         return true;
-    case DIR_N:
-    case DIR_S:
-        if(r != srcf)
-            return false;
-        if(srcr < dstr && r < srcr && r >= dstr)
-            return false;
-        if(dstr < srcr && r <= dstr && r > srcr)
-            return false;
-        return true;
-    default:
-        if(r - srcr != f - srcf)
-            return false;
-
-        if(srcf < dstf && f < srcf && f >= dstf)
-            return false;
-        if(dstf < srcf && f <= dstf && f > srcf)
-            return false;
-        if(srcr < dstr && r < srcr && r >= dstr)
-            return false;
-        if(dstr < srcr && r <= dstr && r > srcr)
-            return false;
-
-        return true;
-    }
+    return false;
 }
 
 static bool move_islegal(board_t* board, move_t move)
 {
+    int i;
     uint8_t dcur;
     pinline_t *curpin;
 
@@ -718,7 +690,7 @@ static bool move_islegal(board_t* board, move_t move)
         return true;
     }
 
-    for(curpin=board->pins[!team]; curpin; curpin=curpin->next)
+    for(i=0, curpin=board->pins[!team]; i<board->npins[!team]; i++, curpin++)
     {
         if(move_sqrinpin(curpin, src) && !move_sqrinpin(curpin, dst))
             return false;

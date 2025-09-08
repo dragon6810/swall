@@ -19,8 +19,6 @@ static int tests_movegen_r(board_t* board, int depth, move_t* move)
         return 1;
 
     memcpy(&newboard, board, sizeof(board_t));
-    newboard.pins[TEAM_WHITE] = newboard.pins[TEAM_BLACK] = NULL;
-    move_findpins(&newboard);
 
     if(move)
         move_domove(&newboard, *move);
@@ -31,8 +29,6 @@ static int tests_movegen_r(board_t* board, int depth, move_t* move)
         count += tests_movegen_r(&newboard, depth - 1, &cur->move);
 
     move_freeset(set);
-    
-    board_freepins(&newboard);
 
     return count;
 }

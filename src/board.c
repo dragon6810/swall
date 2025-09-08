@@ -32,26 +32,6 @@ void board_findpieces(board_t* board)
     }
 }
 
-void board_freepins(board_t* board)
-{
-    int i;
-
-    pinline_t *cur, *next;
-
-    for(i=0; i<TEAM_COUNT; i++)
-    {
-        cur = board->pins[i];
-        while(cur)
-        {
-            next = cur->next;
-            free(cur);
-            cur = next;
-        }
-
-        board->pins[i] = NULL;
-    }
-}
-
 void board_print(const board_t* board)
 {
     int i, r, f;

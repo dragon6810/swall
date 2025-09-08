@@ -48,15 +48,14 @@ typedef enum
     DIR_COUNT,
 } dir_e;
 
+// if you want to make the board not 8x8, this will need changing
+typedef uint8_t bitboard_t[BOARD_LEN];
+
 typedef struct pinline_s
 {
     uint8_t start, end;
-    dir_e dir;
-    struct pinline_s *next;
+    bitboard_t bits;
 } pinline_t;
-
-// if you want to make the board not 8x8, this will need changing
-typedef uint8_t bitboard_t[BOARD_LEN];
 
 typedef struct board_s
 {
@@ -64,7 +63,8 @@ typedef struct board_s
     piece_t pieces[BOARD_AREA];
 
     bitboard_t attacks[TEAM_COUNT];
-    pinline_t *pins[TEAM_COUNT];
+    uint8_t npins[TEAM_COUNT];
+    pinline_t pins[TEAM_COUNT][PIECE_MAX];
 
     uint8_t npieces[TEAM_COUNT];
     uint8_t quickp[TEAM_COUNT][PIECE_MAX];
@@ -77,7 +77,6 @@ typedef struct board_s
 } board_t;
 
 void board_findpieces(board_t* board);
-void board_freepins(board_t* board);
 void board_print(const board_t* board);
 void board_printbits(const bitboard_t bits);
 void board_loadfen(board_t* board, const char* fen);
