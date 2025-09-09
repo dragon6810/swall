@@ -1,9 +1,11 @@
 #include "board.h"
 
+#include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 void board_findpieces(board_t* board)
 {
@@ -32,10 +34,44 @@ void board_findpieces(board_t* board)
     }
 }
 
+void board_findcheck(board_t* board)
+{
+    int i, j;
+
+    for(i=0; i<TEAM_COUNT; i++)
+    {
+        board->check[i] = false;
+        for(j=0; j<board->npieces[i]; j++)
+        {
+            if((board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE) == PIECE_KING)
+                break;
+        }
+
+        if(j >= board->npieces[i])
+            continue;
+
+        board->check[i] = (((uint64_t) 1 << board->quickp[i][j]) & board->attacks[!i]) != 0;
+        if(board->check[i])
+        {
+            printf("check found:\n");
+            printf("king:\n");
+            board_printbits((uint64_t) 1 << board->quickp[i][j]);
+            printf("atk:\n");
+            board_printbits(board->attacks[!i]);
+        }
+    }
+}
+
+#define PRINTUNICODE
+
 void board_print(const board_t* board)
 {
     int i, r, f;
     char c;
+
+    // shut up compiler
+    c = 0;
+    i = c;
 
     printf("  ");
     for(i=0; i<BOARD_LEN; i++)
@@ -53,6 +89,50 @@ void board_print(const board_t* board)
         {
             i = r * BOARD_LEN + f;
 
+#ifdef PRINTUNICODE
+            switch (board->pieces[i] & PIECE_MASK_TYPE)
+            {
+            case PIECE_KING:
+                if(board->pieces[i] & PIECE_MASK_COLOR)
+                    wprintf(L"| %lc ", (wint_t) 0x265A);
+                else
+                    wprintf(L"| %lc ", (wint_t) 0x2654);
+                break;
+            case PIECE_QUEEN:
+                if(board->pieces[i] & PIECE_MASK_COLOR)
+                    wprintf(L"| %lc ", (wint_t) 0x265B);
+                else
+                    wprintf(L"| %lc ", (wint_t) 0x2655);
+                break;
+            case PIECE_ROOK:
+                if(board->pieces[i] & PIECE_MASK_COLOR)
+                    wprintf(L"| %lc ", (wint_t) 0x265C);
+                else
+                    wprintf(L"| %lc ", (wint_t) 0x2656);
+                break;
+            case PIECE_BISHOP:
+                if(board->pieces[i] & PIECE_MASK_COLOR)
+                    wprintf(L"| %lc ", (wint_t) 0x265D);
+                else
+                    wprintf(L"| %lc ", (wint_t) 0x2657);
+                break;
+            case PIECE_KNIGHT:
+                if(board->pieces[i] & PIECE_MASK_COLOR)
+                    wprintf(L"| %lc ", (wint_t) 0x265E);
+                else
+                    wprintf(L"| %lc ", (wint_t) 0x2658);
+                break;
+            case PIECE_PAWN:
+                if(board->pieces[i] & PIECE_MASK_COLOR)
+                    wprintf(L"| %lc ", (wint_t) 0x265F);
+                else
+                    wprintf(L"| %lc ", (wint_t) 0x2659);
+                break;
+            default:
+                printf("|   ");
+                break;
+            }
+#else
             switch(board->pieces[i] & PIECE_MASK_TYPE)
             {
             case PIECE_KING:
@@ -81,6 +161,7 @@ void board_print(const board_t* board)
                 c += 'a' - 'A';
 
             printf("| %c ", c);
+            #endif
         }
 
         printf("|\n  ");
@@ -101,7 +182,7 @@ void board_printbits(const bitboard_t bits)
         for(f=0; f<BOARD_LEN; f++)
         {
             idx = r * BOARD_LEN + f;
-            printf("%d ", (int) ((bits & (1 << idx)) >> idx));
+            printf("%d ", (int) ((bits & ((uint64_t) 1 << idx)) >> idx));
         }
         printf("\n");
     }

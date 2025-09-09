@@ -1,3 +1,4 @@
+#include <locale.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -19,6 +20,8 @@ int main(int argc, char** argv)
     uint8_t sqrs[2];
     move_t move, *pmove;
     moveset_t *moves;
+
+    setlocale(LC_ALL, ""); 
 
     move_init();
 

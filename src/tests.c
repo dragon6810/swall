@@ -2,6 +2,7 @@
 
 #include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "board.h"
@@ -25,9 +26,27 @@ static int tests_movegen_r(board_t* board, int depth, move_t* move)
     if(!depth && move && ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_ENPAS)
         nenpas++;
 
+    if(!depth && move && ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_CASTLE)
+        ncastle++;
+
+    if(!depth && move && (((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMQ
+    || ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMR
+    || ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMB
+    || ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMN))
+        nprom++;
+    
     if(move)
         move_domove(&newboard, *move);
-    
+
+    if(!depth && board->check[board->tomove])
+    {
+        printf("check %d (%s in check):\n", ncheck, board->tomove ? "black" : "white");
+        board_print(&newboard);
+        board_printbits(newboard.attacks[!board->tomove]);
+        abort();
+        ncheck++;
+    }
+
     if(!depth)
         return 1;
 
@@ -56,7 +75,7 @@ void tests_movegen(void)
     move_findattacks(&board);
     move_findpins(&board);
 
-    for(i=1; i<=5; i++)
+    for(i=1; i<=4; i++)
     {
         ncap = nenpas = ncastle = nprom = ncheck = 0;
     
@@ -68,6 +87,9 @@ void tests_movegen(void)
             (double) (stop - start) / CLOCKS_PER_SEC * 1000.0);
         printf("\tcaptures: %d.\n", ncap);
         printf("\ten passants: %d.\n", nenpas);
+        printf("\tcastles: %d.\n", ncastle);
+        printf("\tpromotions: %d.\n", nprom);
+        printf("\tchecks: %d.\n", ncheck);
     }
 
     printf("time spent generating pseudo legal: %lfms (%d%%).\n", 

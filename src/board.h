@@ -71,6 +71,7 @@ typedef struct board_s
     uint8_t quickp[TEAM_COUNT][PIECE_MAX];
     
     team_e tomove;
+    bool check[TEAM_COUNT];
 
     uint8_t enpas; // on the last move, did a pawn just move two squares? if so, the target. else 0xFF
     bool kcastle[TEAM_COUNT]; // starts at true, false if the team's kingside rook moves
@@ -78,6 +79,7 @@ typedef struct board_s
 } board_t;
 
 void board_findpieces(board_t* board);
+void board_findcheck(board_t* board);
 void board_print(const board_t* board);
 void board_printbits(const bitboard_t bits);
 void board_loadfen(board_t* board, const char* fen);

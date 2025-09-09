@@ -28,10 +28,12 @@ void move_domove(board_t* board, move_t move)
         team = TEAM_BLACK;
     ptype = piece & PIECE_MASK_TYPE;
 
+    if(type == MOVETYPE_ENPAS)
+        board->pieces[board->enpas] = 0;
+
     // double pawn push
     board->enpas = 0xFF;
-    if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_PAWN
-    && abs(dst - src) == BOARD_LEN * 2)
+    if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_PAWN && abs(dst - src) == BOARD_LEN * 2)
         board->enpas = dst + (team == TEAM_WHITE ? diroffs[DIR_S] : diroffs[DIR_N]);
 
     if(ptype == PIECE_KING)
@@ -52,13 +54,13 @@ void move_domove(board_t* board, move_t move)
             board->qcastle[!team] = false;
     }
 
-    if(type == MOVETYPE_ENPAS)
-        board->pieces[src / BOARD_LEN * BOARD_LEN + dst % BOARD_LEN] = 0;
+    // move the rook
     if(type == MOVETYPE_CASTLE)
     {
         // kingside
         if(dst > src)
         {
+
             board->pieces[dst - 1] = board->pieces[dst + 1];
             board->pieces[dst + 1] = 0;
         }
@@ -89,6 +91,7 @@ void move_domove(board_t* board, move_t move)
     board_findpieces(board);
     move_findattacks(board);
     move_findpins(board);
+    board_findcheck(board);
 
     mspingen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
@@ -219,7 +222,7 @@ static moveset_t* move_addiflegal(board_t* board, moveset_t* moves, move_t move)
 // if bits is not null, it will ignore set and fill out the bitboard
 static moveset_t* move_sweep
 (
-    moveset_t* set, bitboard_t* bits, board_t* board, 
+    moveset_t* set, board_t* board, 
     uint8_t src, dir_e dir, int max, 
     bool nocapture, movetype_e type
 )
@@ -236,24 +239,17 @@ static moveset_t* move_sweep
     {
         // friendly
         if(((board->pieces[idx] & PIECE_MASK_TYPE) != PIECE_NONE)
-        && ((board->pieces[idx] & PIECE_MASK_COLOR) == (piece & PIECE_MASK_COLOR))
-        && !bits) // if a bitboard is attatched, we're generating an attack board. friendly pieces should be included.
+        && ((board->pieces[idx] & PIECE_MASK_COLOR) == (piece & PIECE_MASK_COLOR)))
             break;
 
         // enemy, but we can't capture
         if(nocapture && (board->pieces[idx] & PIECE_MASK_TYPE) != PIECE_NONE)
             break;
 
-        if(bits)
-            *bits |= (uint64_t) 1 << idx;
-        else
-        {
-            move = 0;
-            move |= src;
-            move |= idx << MOVEBITS_DST_BITS;
-            move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-            set = move_addiflegal(board, set, move);
-        }
+        move = src;
+        move |= idx << MOVEBITS_DST_BITS;
+        move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
+        set = move_addiflegal(board, set, move);
 
         if((board->pieces[idx] & PIECE_MASK_TYPE) != PIECE_NONE)
             break;
@@ -262,18 +258,28 @@ static moveset_t* move_sweep
     return set;
 }
 
-static void move_pawnatk(board_t* board, uint8_t src)
+static void move_sweepatk(board_t* board, bitboard_t* bits, uint8_t src, dir_e dir, int max)
+{
+    int i;
+
+    int idx;
+
+    for(i=0, idx=src+diroffs[dir]; i<max; i++, idx+=diroffs[dir])
+    {
+        *bits |= (uint64_t) 1 << idx;
+
+        if((board->pieces[idx] & PIECE_MASK_TYPE) != PIECE_NONE)
+            break;
+    }
+}
+
+static void move_pawnatk(board_t* board, uint8_t src, team_e team)
 {
     int i;
     
     int f;
-    team_e team;
     int dst;
     dir_e dirs[2];
-
-    team = TEAM_WHITE;
-    if(board->pieces[src] & PIECE_MASK_COLOR)
-        team = TEAM_BLACK;
 
     if(team == TEAM_WHITE)
     {
@@ -299,16 +305,11 @@ static void move_pawnatk(board_t* board, uint8_t src)
     }
 }
 
-static void move_knightatk(board_t* board, uint8_t src)
+static void move_knightatk(board_t* board, uint8_t src, team_e team)
 {
     int i;
     
-    team_e team;
     int dst;
-
-    team = TEAM_WHITE;
-    if(board->pieces[src] & PIECE_MASK_COLOR)
-        team = TEAM_BLACK;
 
     for(i=0; i<8; i++)
     {
@@ -320,61 +321,37 @@ static void move_knightatk(board_t* board, uint8_t src)
     }
 }
 
-static void move_bishopatk(board_t* board, uint8_t src)
+static void move_bishopatk(board_t* board, uint8_t src, team_e team)
 {
     int i;
-    
-    team_e team;
-
-    team = TEAM_WHITE;
-    if(board->pieces[src] & PIECE_MASK_COLOR)
-        team = TEAM_BLACK;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        move_sweep(NULL, &board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
 }
 
-static void move_rookatk(board_t* board, uint8_t src)
+static void move_rookatk(board_t* board, uint8_t src, team_e team)
 {
     int i;
-    
-    team_e team;
-
-    team = TEAM_WHITE;
-    if(board->pieces[src] & PIECE_MASK_COLOR)
-        team = TEAM_BLACK;
 
     for(i=0; i<DIR_NE; i++)
-        move_sweep(NULL, &board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
 }
 
-static void move_queenatk(board_t* board, uint8_t src)
+static void move_queenatk(board_t* board, uint8_t src, team_e team)
 {
     int i;
-    
-    team_e team;
-
-    team = TEAM_WHITE;
-    if(board->pieces[src] & PIECE_MASK_COLOR)
-        team = TEAM_BLACK;
 
     for(i=0; i<DIR_COUNT; i++)
-        move_sweep(NULL, &board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
 }
 
-static void move_kingatk(board_t* board, uint8_t src)
+static void move_kingatk(board_t* board, uint8_t src, team_e team)
 {
     int i;
     
-    team_e team;
-
-    team = TEAM_WHITE;
-    if(board->pieces[src] & PIECE_MASK_COLOR)
-        team = TEAM_BLACK;
-
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            move_sweep(NULL, &board->attacks[team], board, src, i, 1, false, MOVETYPE_DEFAULT);
+            move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
 }
 
 void move_findattacks(board_t* board)
@@ -389,22 +366,22 @@ void move_findattacks(board_t* board)
             switch(board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE)
             {
             case PIECE_KING:
-                move_kingatk(board, board->quickp[i][j]);
+                move_kingatk(board, board->quickp[i][j], i);
                 break;
             case PIECE_QUEEN:
-                move_queenatk(board, board->quickp[i][j]);
+                move_queenatk(board, board->quickp[i][j], i);
                 break;
             case PIECE_ROOK:
-                move_rookatk(board, board->quickp[i][j]);
+                move_rookatk(board, board->quickp[i][j], i);
                 break;
             case PIECE_BISHOP:
-                move_bishopatk(board, board->quickp[i][j]);
+                move_bishopatk(board, board->quickp[i][j], i);
                 break;
             case PIECE_KNIGHT:
-                move_knightatk(board, board->quickp[i][j]);
+                move_knightatk(board, board->quickp[i][j], i);
                 break;
             case PIECE_PAWN:
-                move_pawnatk(board, board->quickp[i][j]);
+                move_pawnatk(board, board->quickp[i][j], i);
                 break;
             default:
                 break;
@@ -555,12 +532,10 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 
     for(i=0; i<2; i++)
     {
-        if(!(src % BOARD_LEN) && !i)
-            continue;
-        if(src % BOARD_LEN == BOARD_LEN-1 && i)
-            continue;
-
         dst = src + diroffs[atk[i]];
+        // edge of board puts us in different rank
+        if(dst / BOARD_LEN != (src + diroffs[dir]) / BOARD_LEN)
+            continue;
 
         if(board->enpas == dst)
         {
@@ -621,7 +596,7 @@ static moveset_t* move_bishopmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        set = move_sweep(set, NULL, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 
     return set;
 }
@@ -631,7 +606,7 @@ static moveset_t* move_rookmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=0; i<DIR_NE; i++)
-        set = move_sweep(set, NULL, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 
     return set;
 }
@@ -649,7 +624,7 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
 
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            set = move_sweep(set, NULL, board, src, i, 1, false, MOVETYPE_DEFAULT);
+            set = move_sweep(set, board, src, i, 1, false, MOVETYPE_DEFAULT);
 
     if(board->kcastle[team] 
     && !(board->pieces[src+1] & PIECE_MASK_TYPE)
@@ -680,7 +655,7 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     for(i=0; i<DIR_COUNT; i++)
-        set = move_sweep(set, NULL, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 
     return set;
 }
