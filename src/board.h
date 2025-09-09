@@ -49,7 +49,7 @@ typedef enum
 } dir_e;
 
 // if you want to make the board not 8x8, this will need changing
-typedef uint8_t bitboard_t[BOARD_LEN];
+typedef uint64_t bitboard_t;
 
 typedef struct pinline_s
 {

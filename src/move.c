@@ -130,14 +130,13 @@ static int move_knightoffs(int idx, int src)
     return r * BOARD_LEN + f;
 }
 
-static bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
+static inline bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
 {
     bitboard_t sqrmask;
 
-    *((uint64_t*)sqrmask) = 0;
-    sqrmask[sqr / BOARD_LEN] |= 1 << (sqr % BOARD_LEN);
+    sqrmask = (uint64_t) 1 << sqr;
 
-    if(*((uint64_t*)sqrmask) & *((uint64_t*)pin->bits))
+    if(sqrmask & pin->bits)
         return true;
     return false;
 }
@@ -181,10 +180,9 @@ static bool move_islegal(board_t* board, move_t move)
 
         for(dcur=dstart; dcur<=dend; dcur++)
         {
-            *((uint64_t*)dstbits) = 0;
-            dstbits[dcur / BOARD_LEN] |= 1 << (dcur % BOARD_LEN);
+            dstbits = (uint64_t) 1 << dcur;
 
-            if(*((uint64_t*)dstbits) & *((uint64_t*)board->attacks[!team]))
+            if(dstbits & board->attacks[!team])
                 return false;
         }
 
@@ -226,7 +224,7 @@ static moveset_t* move_addiflegal(board_t* board, moveset_t* moves, move_t move)
 // if bits is not null, it will ignore set and fill out the bitboard
 static moveset_t* move_sweep
 (
-    moveset_t* set, bitboard_t bits, board_t* board, 
+    moveset_t* set, bitboard_t* bits, board_t* board, 
     uint8_t src, dir_e dir, int max, 
     bool nocapture, movetype_e type
 )
@@ -252,7 +250,7 @@ static moveset_t* move_sweep
             break;
 
         if(bits)
-            bits[idx / BOARD_LEN] |= 1 << (idx % BOARD_LEN);
+            *bits |= (uint64_t) 1 << idx;
         else
         {
             move = 0;
@@ -302,7 +300,7 @@ static void move_pawnatk(board_t* board, uint8_t src)
             continue;
 
         dst = src + diroffs[dirs[i]];
-        board->attacks[team][dst / BOARD_LEN] |= 1 << (dst % BOARD_LEN);
+        board->attacks[team] |= (uint64_t) 1 << dst;
     }
 }
 
@@ -323,7 +321,7 @@ static void move_knightatk(board_t* board, uint8_t src)
         if(dst < 0)
             continue;
 
-        board->attacks[team][dst / BOARD_LEN] |= 1 << (dst % BOARD_LEN);
+        board->attacks[team] |= (uint64_t) 1 << dst;
     }
 }
 
@@ -338,7 +336,7 @@ static void move_bishopatk(board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        move_sweep(NULL, board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        move_sweep(NULL, &board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 }
 
 static void move_rookatk(board_t* board, uint8_t src)
@@ -352,7 +350,7 @@ static void move_rookatk(board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=0; i<DIR_NE; i++)
-        move_sweep(NULL, board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        move_sweep(NULL, &board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 }
 
 static void move_queenatk(board_t* board, uint8_t src)
@@ -366,7 +364,7 @@ static void move_queenatk(board_t* board, uint8_t src)
         team = TEAM_BLACK;
 
     for(i=0; i<DIR_COUNT; i++)
-        move_sweep(NULL, board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        move_sweep(NULL, &board->attacks[team], board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
 }
 
 static void move_kingatk(board_t* board, uint8_t src)
@@ -381,7 +379,7 @@ static void move_kingatk(board_t* board, uint8_t src)
 
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            move_sweep(NULL, board->attacks[team], board, src, i, 1, false, MOVETYPE_DEFAULT);
+            move_sweep(NULL, &board->attacks[team], board, src, i, 1, false, MOVETYPE_DEFAULT);
 }
 
 void move_findattacks(board_t* board)
@@ -390,7 +388,7 @@ void move_findattacks(board_t* board)
 
     for(i=0; i<TEAM_COUNT; i++)
     {
-        *((uint64_t*)board->attacks[i]) = 0;
+        board->attacks[i] = 0;
         for(j=0; j<board->npieces[i]; j++)
         {
             switch(board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE)
@@ -433,7 +431,7 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
     max = sweeptable[src][dir];
     for(i=0, idx=src+diroffs[dir], line.nblocks=0; i<max; i++, idx+=diroffs[dir])
     {
-        line.bits[idx / BOARD_LEN] |= 1 << (idx % BOARD_LEN);
+        line.bits |= (uint64_t) 1 << idx;
         if(!(board->pieces[idx] & PIECE_MASK_TYPE))
             continue;
 
@@ -441,6 +439,7 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
         if((board->pieces[idx] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR))
             return;
 
+        // enemy king, end of pin.
         if((board->pieces[idx] & PIECE_MASK_TYPE) == PIECE_KING)
             break;
 

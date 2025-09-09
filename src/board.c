@@ -94,10 +94,15 @@ void board_printbits(const bitboard_t bits)
 {
     int r, f;
 
+    int idx;
+
     for(r=BOARD_LEN-1; r>=0; r--)
     {
         for(f=0; f<BOARD_LEN; f++)
-            printf("%c ", '0' + ((bits[r] & (1 << f)) >> f));
+        {
+            idx = r * BOARD_LEN + f;
+            printf("%d ", (int) ((bits & (1 << idx)) >> idx));
+        }
         printf("\n");
     }
 }
