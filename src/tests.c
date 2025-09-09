@@ -7,6 +7,8 @@
 #include "board.h"
 #include "move.h"
 
+int ncap, nenpas, ncastle, nprom, ncheck;
+
 static int tests_movegen_r(board_t* board, int depth, move_t* move)
 {
     moveset_t *cur;
@@ -15,13 +17,19 @@ static int tests_movegen_r(board_t* board, int depth, move_t* move)
     moveset_t *set;
     int count;
 
-    if(!depth)
-        return 1;
-
     memcpy(&newboard, board, sizeof(board_t));
+
+    if(!depth && move && (board->pieces[(*move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & PIECE_MASK_TYPE))
+        ncap++;
+
+    if(!depth && move && ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_ENPAS)
+        nenpas++;
 
     if(move)
         move_domove(&newboard, *move);
+    
+    if(!depth)
+        return 1;
 
     set = move_alllegal(&newboard);
 
@@ -50,12 +58,16 @@ void tests_movegen(void)
 
     for(i=1; i<=5; i++)
     {
+        ncap = nenpas = ncastle = nprom = ncheck = 0;
+    
         start = clock();
         count = tests_movegen_r(&board, i, NULL);
         stop = clock();
 
         printf("depth %d: %d moves (%fms).\n", i, count, 
             (double) (stop - start) / CLOCKS_PER_SEC * 1000.0);
+        printf("\tcaptures: %d.\n", ncap);
+        printf("\ten passants: %d.\n", nenpas);
     }
 
     printf("time spent generating pseudo legal: %lfms (%d%%).\n", 

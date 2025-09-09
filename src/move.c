@@ -135,10 +135,7 @@ static inline bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
     bitboard_t sqrmask;
 
     sqrmask = (uint64_t) 1 << sqr;
-
-    if(sqrmask & pin->bits)
-        return true;
-    return false;
+    return (sqrmask & pin->bits) != 0;
 }
 
 static bool move_islegal(board_t* board, move_t move)
@@ -161,9 +158,7 @@ static bool move_islegal(board_t* board, move_t move)
 
     if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_KING)
     {
-        dstart = dst;
-        dend = dst;
-
+        dstart = dend = dst;
         if(type == MOVETYPE_CASTLE)
         {
             if(src < dst)
