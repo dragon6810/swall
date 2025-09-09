@@ -58,6 +58,8 @@ void tests_movegen(void)
             (double) (stop - start) / CLOCKS_PER_SEC * 1000.0);
     }
 
-    printf("time spent generating pseudo legal: %lfms (%d%%).\n", mspseudo, (int) (mspseudo / (mspseudo + mslegal) * 100));
-    printf("time spent generating legal: %lfms (%d%%).\n", mslegal, (int) (mslegal / (mspseudo + mslegal) * 100));
+    printf("time spent generating pseudo legal: %lfms (%d%%).\n", 
+        mspseudo, (int) (mspseudo / (mspseudo + mspingen) * 100));
+    printf("time spent generating pins: %lfms (%d%%).\n", 
+        mspingen, (int) (mspingen / (mspseudo + mspingen) * 100));
 }

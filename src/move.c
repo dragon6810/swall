@@ -7,12 +7,17 @@
 
 int sweeptable[BOARD_AREA][DIR_COUNT];
 
+double mspingen = 0;
+
 void move_domove(board_t* board, move_t move)
 {
     int type, src, dst;
     piece_t piece, newp;
     team_e team;
     piece_e ptype;
+    clock_t start;
+
+    start = clock();
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -85,6 +90,8 @@ void move_domove(board_t* board, move_t move)
     move_findattacks(board);
     move_findpins(board);
 
+    mspingen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
+
     board->tomove = !board->tomove;
 }
 
@@ -123,6 +130,99 @@ static int move_knightoffs(int idx, int src)
     return r * BOARD_LEN + f;
 }
 
+static bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
+{
+    bitboard_t sqrmask;
+
+    *((uint64_t*)sqrmask) = 0;
+    sqrmask[sqr / BOARD_LEN] |= 1 << (sqr % BOARD_LEN);
+
+    if(*((uint64_t*)sqrmask) & *((uint64_t*)pin->bits))
+        return true;
+    return false;
+}
+
+static bool move_islegal(board_t* board, move_t move)
+{
+    int i;
+    uint8_t dcur;
+    pinline_t *curpin;
+
+    uint8_t src, dst, type, dstart, dend;
+    team_e team;
+    bitboard_t dstbits;
+
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+
+    team = TEAM_WHITE;
+    if(board->pieces[src] & PIECE_MASK_COLOR)
+        team = TEAM_BLACK;
+
+    if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_KING)
+    {
+        dstart = dst;
+        dend = dst;
+
+        if(type == MOVETYPE_CASTLE)
+        {
+            if(src < dst)
+            {
+                dstart = src;
+                dend = dst;
+            }
+            else
+            {
+                dstart = dst;
+                dend = src;
+            }
+        }
+
+        for(dcur=dstart; dcur<=dend; dcur++)
+        {
+            *((uint64_t*)dstbits) = 0;
+            dstbits[dcur / BOARD_LEN] |= 1 << (dcur % BOARD_LEN);
+
+            if(*((uint64_t*)dstbits) & *((uint64_t*)board->attacks[!team]))
+                return false;
+        }
+
+        return true;
+    }
+
+    for(i=0, curpin=board->pins[!team]; i<board->npins[!team]; i++, curpin++)
+    {
+        // we're capturing the source, so don't worry about it.
+        if(dst == curpin->start)
+            continue;
+
+        // leaving an open pin open.
+        if(!curpin->nblocks && !move_sqrinpin(curpin, dst))
+            return false;
+
+        // stepping out of a pin we were in.
+        if(curpin->nblocks && move_sqrinpin(curpin, src) && !move_sqrinpin(curpin, dst))
+            return false;
+    }
+
+    return true;
+}
+
+static moveset_t* move_addiflegal(board_t* board, moveset_t* moves, move_t move)
+{
+    moveset_t *newmove;
+
+    if(!move_islegal(board, move))
+        return moves;
+
+    newmove = malloc(sizeof(moveset_t));
+    newmove->move = move;
+    newmove->next = moves;
+
+    return newmove;
+}
+
 // if bits is not null, it will ignore set and fill out the bitboard
 static moveset_t* move_sweep
 (
@@ -134,22 +234,17 @@ static moveset_t* move_sweep
     int i;
 
     piece_t piece;
-    int idx, add;
-    moveset_t *newset, *newmove;
+    int idx;
+    move_t move;
 
     piece = board->pieces[src];
 
-    newset = set;
-
-    if(!max)
-        return newset;
-
-    for(i=0, add=diroffs[dir], idx=src+add; i<max; i++, idx+=add)
+    for(i=0, idx=src+diroffs[dir]; i<max; i++, idx+=diroffs[dir])
     {
         // friendly
         if(((board->pieces[idx] & PIECE_MASK_TYPE) != PIECE_NONE)
         && ((board->pieces[idx] & PIECE_MASK_COLOR) == (piece & PIECE_MASK_COLOR))
-        && !bits)
+        && !bits) // if a bitboard is attatched, we're generating an attack board. friendly pieces should be included.
             break;
 
         // enemy, but we can't capture
@@ -157,26 +252,21 @@ static moveset_t* move_sweep
             break;
 
         if(bits)
-        {
             bits[idx / BOARD_LEN] |= 1 << (idx % BOARD_LEN);
-        }
         else
         {
-            newmove = malloc(sizeof(moveset_t));
-            newmove->move = 0;
-            newmove->move |= src;
-            newmove->move |= idx << MOVEBITS_DST_BITS;
-            newmove->move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-            newmove->next = newset;
-            newset = newmove;
+            move = 0;
+            move |= src;
+            move |= idx << MOVEBITS_DST_BITS;
+            move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
+            set = move_addiflegal(board, set, move);
         }
 
-        // enemy, but we captured.
         if((board->pieces[idx] & PIECE_MASK_TYPE) != PIECE_NONE)
             break;
     }
 
-    return newset;
+    return set;
 }
 
 static void move_pawnatk(board_t* board, uint8_t src)
@@ -416,10 +506,11 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
     int type;
 
-    int max, dst;
+    bool dbl;
+    int dst;
     int starttype, stoptype;
     dir_e dir, atk[2];
-    moveset_t *move;
+    move_t move;
 
     starttype = stoptype = MOVETYPE_DEFAULT;
 
@@ -430,7 +521,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
             starttype = MOVETYPE_PROMQ;
             stoptype = MOVETYPE_PROMN;
         }
-        max = (src / BOARD_LEN == BOARD_LEN - 2) + 1;
+        dbl = (src / BOARD_LEN == BOARD_LEN - 2);
         dir = DIR_S;
         atk[0] = DIR_SW;
         atk[1] = DIR_SE;
@@ -442,14 +533,31 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
             starttype = MOVETYPE_PROMQ;
             stoptype = MOVETYPE_PROMN;
         }
-        max = (src / BOARD_LEN == 1) + 1;
+        dbl = (src / BOARD_LEN == 1);
         dir = DIR_N;
         atk[0] = DIR_NW;
         atk[1] = DIR_NE;
     }
 
-    for(type=starttype; type<=stoptype; type++)
-        set = move_sweep(set, NULL, board, src, dir, max, true, type);
+    dst = src + diroffs[dir];
+    if(!(board->pieces[dst] & PIECE_MASK_TYPE))
+    {
+        for(type=starttype; type<=stoptype; type++)
+        {
+            move = src;
+            move |= ((uint16_t)dst) << MOVEBITS_DST_BITS;
+            move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
+            set = move_addiflegal(board, set, move);
+        }
+
+        dst += diroffs[dir];
+        if(dbl && !(board->pieces[dst] & PIECE_MASK_TYPE))
+        {
+            move = src;
+            move |= ((uint16_t)dst) << MOVEBITS_DST_BITS;
+            set = move_addiflegal(board, set, move);
+        }
+    }
 
     for(i=0; i<2; i++)
     {
@@ -462,15 +570,13 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 
         if(board->enpas == dst)
         {
-            move = malloc(sizeof(moveset_t));
-            move->move = 0;
-            move->move |= src;
-            move->move |= dst << MOVEBITS_DST_BITS;
-            move->move |= ((uint16_t)MOVETYPE_ENPAS) << MOVEBITS_TYP_BITS;
-            move->next = set;
-            set = move;
+            move = 0;
+            move |= src;
+            move |= dst << MOVEBITS_DST_BITS;
+            move |= ((uint16_t)MOVETYPE_ENPAS) << MOVEBITS_TYP_BITS;
+            set = move_addiflegal(board, set, move);
             
-            // no need to check since logically the square must be clear
+            // no need to check normal attacks since logically the square must be clear
             continue;
         }
 
@@ -480,13 +586,11 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
         
         for(type=starttype; type<=stoptype; type++)
         {
-            move = malloc(sizeof(moveset_t));
-            move->move = 0;
-            move->move |= src;
-            move->move |= dst << MOVEBITS_DST_BITS;
-            move->move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-            move->next = set;
-            set = move;
+            move = 0;
+            move |= src;
+            move |= dst << MOVEBITS_DST_BITS;
+            move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
+            set = move_addiflegal(board, set, move);
         }
     }
 
@@ -498,7 +602,7 @@ static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     int dst;
-    moveset_t *move;
+    move_t move;
     
     for(i=0; i<8; i++)
     {
@@ -510,12 +614,9 @@ static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
         && ((board->pieces[dst] & PIECE_MASK_COLOR) == (board->pieces[src] & PIECE_MASK_COLOR)))
             continue;
 
-        move = malloc(sizeof(moveset_t));
-        move->move = 0;
-        move->move |= src;
-        move->move |= dst << MOVEBITS_DST_BITS;
-        move->next = set;
-        set = move;
+        move = src;
+        move |= dst << MOVEBITS_DST_BITS;
+        set = move_addiflegal(board, set, move);
     }
 
     return set;
@@ -546,7 +647,7 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
     int i;
 
     team_e team;
-    moveset_t *move;
+    move_t move;
 
     team = TEAM_WHITE;
     if(board->pieces[src] & PIECE_MASK_COLOR)
@@ -560,13 +661,10 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
     && !(board->pieces[src+1] & PIECE_MASK_TYPE)
     && !(board->pieces[src+2] & PIECE_MASK_TYPE))
     {
-        move = malloc(sizeof(moveset_t));
-        move->move = 0;
-        move->move |= src;
-        move->move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
-        move->move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        move->next = set;
-        set = move;
+        move = src;
+        move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
+        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+        set = move_addiflegal(board, set, move);
     }
 
     if(board->qcastle[team] 
@@ -574,13 +672,10 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
     && !(board->pieces[src-2] & PIECE_MASK_TYPE)
     && !(board->pieces[src-3] & PIECE_MASK_TYPE))
     {
-        move = malloc(sizeof(moveset_t));
-        move->move = 0;
-        move->move |= src;
-        move->move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
-        move->move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        move->next = set;
-        set = move;
+        move = src;
+        move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
+        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+        set = move_addiflegal(board, set, move);
     }
 
     return set;
@@ -596,115 +691,8 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
     return set;
 }
 
-static bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
-{
-    bitboard_t sqrmask;
 
-    *((uint64_t*)sqrmask) = 0;
-    sqrmask[sqr / BOARD_LEN] |= 1 << (sqr % BOARD_LEN);
-
-    if(*((uint64_t*)sqrmask) & *((uint64_t*)pin->bits))
-        return true;
-    return false;
-}
-
-static bool move_islegal(board_t* board, move_t move)
-{
-    int i;
-    uint8_t dcur;
-    pinline_t *curpin;
-
-    uint8_t src, dst, type, dstart, dend;
-    team_e team;
-    bitboard_t dstbits;
-
-    src = move & MOVEBITS_SRC_MASK;
-    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
-
-    team = TEAM_WHITE;
-    if(board->pieces[src] & PIECE_MASK_COLOR)
-        team = TEAM_BLACK;
-
-    if((board->pieces[src] & PIECE_MASK_TYPE) == PIECE_KING)
-    {
-        dstart = dst;
-        dend = dst;
-
-        if(type == MOVETYPE_CASTLE)
-        {
-            if(src < dst)
-            {
-                dstart = src;
-                dend = dst;
-            }
-            else
-            {
-                dstart = dst;
-                dend = src;
-            }
-        }
-
-        for(dcur=dstart; dcur<=dend; dcur++)
-        {
-            *((uint64_t*)dstbits) = 0;
-            dstbits[dcur / BOARD_LEN] |= 1 << (dcur % BOARD_LEN);
-
-            if(*((uint64_t*)dstbits) & *((uint64_t*)board->attacks[!team]))
-                return false;
-        }
-
-        return true;
-    }
-
-    for(i=0, curpin=board->pins[!team]; i<board->npins[!team]; i++, curpin++)
-    {
-        // we're capturing the source, so don't worry about it.
-        if(dst == curpin->start)
-            continue;
-
-        // leaving an open pin open.
-        if(!curpin->nblocks && !move_sqrinpin(curpin, dst))
-            return false;
-
-        // stepping out of a pin we were in.
-        if(curpin->nblocks && move_sqrinpin(curpin, src) && !move_sqrinpin(curpin, dst))
-            return false;
-    }
-
-    return true;
-}
-
-static moveset_t* move_filterset(board_t* board, moveset_t* moves)
-{
-    moveset_t *cur, *next;
-
-    moveset_t *newset;
-
-    newset = NULL;
-
-    cur = moves;
-    while(cur)
-    {
-        next = cur->next;
-
-        if(!move_islegal(board, cur->move))
-        {
-            free(cur);
-            cur = next;
-            continue;
-        }
-
-        cur->next = newset;
-        newset = cur;
-
-        cur = next;
-    }
-
-    return newset;
-}
-
-double mspseudo = 0, mslegal = 0;
+double mspseudo = 0;
 
 moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
 {
@@ -739,10 +727,6 @@ moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
     }
     mspseudo += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
-    start = clock();
-    moves = move_filterset(board, moves);
-    mslegal += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
-    
     return moves;
 }
 
