@@ -23,6 +23,7 @@ typedef enum
     PIECE_BISHOP,
     PIECE_KNIGHT,
     PIECE_PAWN,
+    PIECE_COUNT,
 } piece_e;
 
 // 0000 (0 = white, 1 = black) type
@@ -60,15 +61,14 @@ typedef struct pinline_s
 
 typedef struct board_s
 {
-    // row-major, could bit pack in the future since each peaces is one nibble.
-    piece_t pieces[BOARD_AREA];
+    // pboards[team][PIECE_NONE] is a bitwise or of all pieces for that team
+    bitboard_t pboards[TEAM_COUNT][PIECE_COUNT];
 
+    uint8_t npiece[TEAM_COUNT];
+    uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     bitboard_t attacks[TEAM_COUNT];
     uint8_t npins[TEAM_COUNT];
-    pinline_t pins[TEAM_COUNT][PIECE_MAX];
-
-    uint8_t npieces[TEAM_COUNT];
-    uint8_t quickp[TEAM_COUNT][PIECE_MAX];
+    pinline_t pins[TEAM_COUNT][PIECE_MAX*8];
     
     team_e tomove;
     bool check[TEAM_COUNT];

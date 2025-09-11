@@ -9,64 +9,87 @@
 
 void board_findpieces(board_t* board)
 {
-    int i;
+    team_e t;
+    piece_e p;
+    int sqr;
 
-    team_e team;
+    bitboard_t sqrmask;
 
-    board->npieces[TEAM_WHITE] = board->npieces[TEAM_BLACK] = 0;
+    board->npiece[TEAM_WHITE] = board->npiece[TEAM_BLACK] = 0;
 
-    for(i=0; i<BOARD_AREA; i++)
+    for(sqr=0; sqr<BOARD_AREA; sqr++)
     {
-        if(!(board->pieces[i] & PIECE_MASK_TYPE))
-            continue;
+        sqrmask = (uint64_t) 1 << sqr;
 
-        team = TEAM_WHITE;
-        if(board->pieces[i] & PIECE_MASK_COLOR)
-            team = TEAM_BLACK;
-
-        if(board->npieces[team] >= PIECE_MAX)
+        for(t=0; t<TEAM_COUNT; t++)
         {
-            printf("board_findpieces: max pieces reached! max is %d.\n", PIECE_MAX);
-            exit(1);
-        }
+            if(!(sqrmask & board->pboards[t][PIECE_NONE]))
+                continue;
 
-        board->quickp[team][board->npieces[team]++] = i;
+            for(p=0; p<PIECE_COUNT; p++)
+                if(sqrmask & board->pboards[t][p])
+                    break;
+            
+            board->ptable[t][board->npiece[t]++] = sqr;
+        }
     }
 }
 
 void board_findcheck(board_t* board)
 {
-    int i, j;
+    int i;
 
     for(i=0; i<TEAM_COUNT; i++)
-    {
-        board->check[i] = false;
-        for(j=0; j<board->npieces[i]; j++)
-        {
-            if((board->pieces[board->quickp[i][j]] & PIECE_MASK_TYPE) == PIECE_KING)
-                break;
-        }
-
-        if(j >= board->npieces[i])
-            continue;
-
-        board->check[i] = (((uint64_t) 1 << board->quickp[i][j]) & board->attacks[!i]) != 0;
-        if(board->check[i])
-        {
-            printf("check found:\n");
-            printf("king:\n");
-            board_printbits((uint64_t) 1 << board->quickp[i][j]);
-            printf("atk:\n");
-            board_printbits(board->attacks[!i]);
-        }
-    }
+        board->check[i] = (board->pboards[i][PIECE_KING] & board->attacks[!i]) != 0;
 }
 
 #define PRINTUNICODE
 
+#ifdef PRINTUNICODE
+wint_t piecechars[TEAM_COUNT][PIECE_COUNT] = 
+{
+    { 
+        0x2654,
+        0x2655,
+        0x2656,
+        0x2657,
+        0x2658,
+        0x2659,
+    },
+    { 
+        0x265A,
+        0x265B,
+        0x265C,
+        0x265D,
+        0x265E,
+        0x265F,
+    },
+};
+#else
+char piecechars[TEAM_COUNT][PIECE_COUNT] = 
+{
+    { 
+        'K',
+        'Q',
+        'R',
+        'B',
+        'N',
+        'P',
+    },
+    { 
+        'k',
+        'q',
+        'r',
+        'b',
+        'n',
+        'p',
+    },
+};
+#endif
+
 void board_print(const board_t* board)
 {
-    int i, r, f;
+    int i, r, f, t, p;
     char c;
 
     // shut up compiler
@@ -89,79 +112,27 @@ void board_print(const board_t* board)
         {
             i = r * BOARD_LEN + f;
 
+            for(t=0; t<TEAM_COUNT; t++)
+            {
+                for(p=PIECE_KING; p<PIECE_COUNT; p++)
+                {
+                    if(!((uint64_t) 1 << i & board->pboards[t][p]))
+                        continue;
+
 #ifdef PRINTUNICODE
-            switch (board->pieces[i] & PIECE_MASK_TYPE)
-            {
-            case PIECE_KING:
-                if(board->pieces[i] & PIECE_MASK_COLOR)
-                    wprintf(L"| %lc ", (wint_t) 0x265A);
-                else
-                    wprintf(L"| %lc ", (wint_t) 0x2654);
-                break;
-            case PIECE_QUEEN:
-                if(board->pieces[i] & PIECE_MASK_COLOR)
-                    wprintf(L"| %lc ", (wint_t) 0x265B);
-                else
-                    wprintf(L"| %lc ", (wint_t) 0x2655);
-                break;
-            case PIECE_ROOK:
-                if(board->pieces[i] & PIECE_MASK_COLOR)
-                    wprintf(L"| %lc ", (wint_t) 0x265C);
-                else
-                    wprintf(L"| %lc ", (wint_t) 0x2656);
-                break;
-            case PIECE_BISHOP:
-                if(board->pieces[i] & PIECE_MASK_COLOR)
-                    wprintf(L"| %lc ", (wint_t) 0x265D);
-                else
-                    wprintf(L"| %lc ", (wint_t) 0x2657);
-                break;
-            case PIECE_KNIGHT:
-                if(board->pieces[i] & PIECE_MASK_COLOR)
-                    wprintf(L"| %lc ", (wint_t) 0x265E);
-                else
-                    wprintf(L"| %lc ", (wint_t) 0x2658);
-                break;
-            case PIECE_PAWN:
-                if(board->pieces[i] & PIECE_MASK_COLOR)
-                    wprintf(L"| %lc ", (wint_t) 0x265F);
-                else
-                    wprintf(L"| %lc ", (wint_t) 0x2659);
-                break;
-            default:
-                printf("|   ");
-                break;
-            }
+                    wprintf(L"| %lc ", piecechars[t][p-1]);
 #else
-            switch(board->pieces[i] & PIECE_MASK_TYPE)
-            {
-            case PIECE_KING:
-                c = 'K';
-                break;
-            case PIECE_QUEEN:
-                c = 'Q';
-                break;
-            case PIECE_ROOK:
-                c = 'R';
-                break;
-            case PIECE_BISHOP:
-                c = 'B';
-                break;
-            case PIECE_KNIGHT:
-                c = 'N';
-                break;
-            case PIECE_PAWN:
-                c = 'P';
-                break;
-            default:
-                c = ' ';
+                    printf("| %c ", piecechars[t][p-1]);
+#endif
+
+                    break;
+                }
+                if(p < PIECE_COUNT)
+                    break;
             }
 
-            if(c != ' ' && board->pieces[i] & PIECE_MASK_COLOR)
-                c += 'a' - 'A';
-
-            printf("| %c ", c);
-            #endif
+            if(t >= TEAM_COUNT)
+                printf("|   ");
         }
 
         printf("|\n  ");
@@ -195,6 +166,8 @@ void board_loadfen(board_t* board, const char* fen)
 
     bool black;
     char pc;
+
+    memset(board, 0, sizeof(board_t));
 
     r = BOARD_LEN-1;
     f = 0;
@@ -243,34 +216,35 @@ void board_loadfen(board_t* board, const char* fen)
             }
 
             i = r * BOARD_LEN + f;
-
-            board->pieces[i] = 0;
             switch(pc)
             {
             case 'K':
-                board->pieces[i] |= PIECE_KING;
+                board->pboards[black][PIECE_KING] |= (uint64_t) 1 << i;
+                board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'Q':
-                board->pieces[i] |= PIECE_QUEEN;
+                board->pboards[black][PIECE_QUEEN] |= (uint64_t) 1 << i;
+                board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'R':
-                board->pieces[i] |= PIECE_ROOK;
+                board->pboards[black][PIECE_ROOK] |= (uint64_t) 1 << i;
+                board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'B':
-                board->pieces[i] |= PIECE_BISHOP;
+                board->pboards[black][PIECE_BISHOP] |= (uint64_t) 1 << i;
+                board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'N':
-                board->pieces[i] |= PIECE_KNIGHT;
+                board->pboards[black][PIECE_KNIGHT] |= (uint64_t) 1 << i;
+                board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'P':
-                board->pieces[i] |= PIECE_PAWN;
+                board->pboards[black][PIECE_PAWN] |= (uint64_t) 1 << i;
+                board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             default:
                 goto badfen;
             }
-
-            if(black)
-                board->pieces[i] |= PIECE_MASK_COLOR;
 
             f++;
 

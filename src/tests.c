@@ -16,11 +16,15 @@ static int tests_movegen_r(board_t* board, int depth, move_t* move)
 
     board_t newboard;
     moveset_t *set;
+    int dst;
     int count;
 
     memcpy(&newboard, board, sizeof(board_t));
 
-    if(!depth && move && (board->pieces[(*move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & PIECE_MASK_TYPE))
+    if(move)
+        dst = (*move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    if(!depth && move 
+    && ((board->pboards[TEAM_BLACK][PIECE_NONE] | board->pboards[TEAM_WHITE][PIECE_NONE]) & (uint64_t) 1 << dst))
         ncap++;
 
     if(!depth && move && ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_ENPAS)
