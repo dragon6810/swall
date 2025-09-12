@@ -215,7 +215,7 @@ static bool move_islegal(board_t* board, move_t move)
 static moveset_t* move_addiflegal(board_t* board, moveset_t* moves, move_t move)
 {
     moveset_t *newmove;
-    
+
     if(!move_islegal(board, move))
         return moves;
 
@@ -582,7 +582,7 @@ static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
     move_t move;
     team_e team;
 
-    if(board->pboards[TEAM_WHITE][PIECE_NONE] & ((uint64_t) 1 << src))
+    if(board->pboards[TEAM_WHITE][PIECE_KNIGHT] & (uint64_t) 1 << src)
         team = TEAM_WHITE;
     else
         team = TEAM_BLACK;
@@ -593,7 +593,7 @@ static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
         if(dst < 0)
             continue;
 
-        if(!(board->ptable[dst][!team] & ((uint64_t) 1 << dst)))
+        if(board->pboards[team][PIECE_NONE] & (uint64_t) 1 << dst)
             continue;
 
         move = src;
@@ -683,17 +683,17 @@ moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
 
     srcmask = (uint64_t) 1 << src;
     if((board->pboards[TEAM_WHITE][PIECE_KING] | board->pboards[TEAM_BLACK][PIECE_KING]) & srcmask)
-        move_kingmoves(moves, board, src);
+        moves = move_kingmoves(moves, board, src);
     else if((board->pboards[TEAM_WHITE][PIECE_QUEEN] | board->pboards[TEAM_BLACK][PIECE_QUEEN]) & srcmask)
-        move_queenmoves(moves, board, src);
+        moves = move_queenmoves(moves, board, src);
     else if((board->pboards[TEAM_WHITE][PIECE_ROOK] | board->pboards[TEAM_BLACK][PIECE_ROOK]) & srcmask)
-        move_rookmoves(moves, board, src);
+        moves = move_rookmoves(moves, board, src);
     else if((board->pboards[TEAM_WHITE][PIECE_BISHOP] | board->pboards[TEAM_BLACK][PIECE_BISHOP]) & srcmask)
-        move_bishopmoves(moves, board, src);
+        moves = move_bishopmoves(moves, board, src);
     else if((board->pboards[TEAM_WHITE][PIECE_KNIGHT] | board->pboards[TEAM_BLACK][PIECE_KNIGHT]) & srcmask)
-        move_knightmoves(moves, board, src);
+        moves = move_knightmoves(moves, board, src);
     else if((board->pboards[TEAM_WHITE][PIECE_PAWN] | board->pboards[TEAM_BLACK][PIECE_PAWN]) & srcmask)
-        move_pawnmoves(moves, board, src);
+        moves = move_pawnmoves(moves, board, src);
 
     mspseudo += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
