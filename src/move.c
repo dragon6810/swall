@@ -13,7 +13,8 @@ void move_domove(board_t* board, move_t move)
 {
     int type, src, dst;
     team_e team;
-    piece_e ptype, newtype;
+    piece_e ptype, newtype, captype;
+    int enpasoffs;
     clock_t start;
 
     start = clock();
@@ -30,13 +31,17 @@ void move_domove(board_t* board, move_t move)
         if(board->pboards[team][ptype] & (uint64_t) 1 << src)
             break;
 
+    enpasoffs = board->tomove == TEAM_WHITE ? diroffs[DIR_S] : diroffs[DIR_N];
     if(type == MOVETYPE_ENPAS)
-        board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << board->enpas;
+    {
+        board->pboards[!team][PIECE_NONE] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
+        board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
+    }
 
     // double pawn push
     board->enpas = 0xFF;
     if(ptype == PIECE_PAWN && abs(dst - src) == BOARD_LEN * 2)
-        board->enpas = dst + (team == TEAM_WHITE ? diroffs[DIR_S] : diroffs[DIR_N]);
+        board->enpas = dst + enpasoffs;
 
     if(ptype == PIECE_KING)
         board->kcastle[team] = board->qcastle[team] = false;
@@ -81,6 +86,10 @@ void move_domove(board_t* board, move_t move)
     board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << src;
     board->pboards[team][newtype] |= (uint64_t) 1 << dst;
     board->pboards[team][PIECE_NONE] |= (uint64_t) 1 << dst;
+
+    if(board->pboards[!team][PIECE_NONE] & (uint64_t) 1 << dst)
+        for(captype=0; captype<PIECE_COUNT; captype++)
+            board->pboards[!team][captype] &= ~((uint64_t) 1 << dst);
 
     board_findpieces(board);
     move_findattacks(board);
