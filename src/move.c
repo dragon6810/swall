@@ -23,20 +23,12 @@ void move_domove(board_t* board, move_t move)
     type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
 
     for(team=0; team<TEAM_COUNT; team++)
-        if(((uint64_t) 1 << src) & board->pboards[team][PIECE_NONE])
+        if(board->pboards[team][PIECE_NONE] & (uint64_t) 1 << src)
             break;
 
-    // moving from empty square
-    if(team >= TEAM_COUNT)
-        return;
-
-    for(ptype=0; ptype<PIECE_COUNT; ptype++)
-        if(board->pboards[team][ptype] & ((uint64_t) 1 << src))
+    for(ptype=PIECE_KING; ptype<PIECE_COUNT; ptype++)
+        if(board->pboards[team][ptype] & (uint64_t) 1 << src)
             break;
-
-    // bitboard desync
-    if(ptype >= PIECE_COUNT)
-        return;
 
     if(type == MOVETYPE_ENPAS)
         board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << board->enpas;
@@ -85,11 +77,12 @@ void move_domove(board_t* board, move_t move)
         newtype = ptype;
     }
 
-    board->pboards[team][ptype] &= ~((uint64_t) 1 << src);
-    board->pboards[team][PIECE_NONE] &= ~((uint64_t) 1 << dst);
+    board->pboards[team][ptype] ^= (uint64_t) 1 << src;
+    board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << src;
     board->pboards[team][newtype] |= (uint64_t) 1 << dst;
     board->pboards[team][PIECE_NONE] |= (uint64_t) 1 << dst;
 
+    board_findpieces(board);
     move_findattacks(board);
     move_findpins(board);
     board_findcheck(board);
@@ -376,8 +369,6 @@ void move_findattacks(board_t* board)
         for(j=0; j<board->npiece[i]; j++)
         {
             pmask = (uint64_t) 1 << board->ptable[i][j];
-            if(!(pmask & board->pboards[i][PIECE_NONE]))
-                continue;
 
             if(pmask & board->pboards[i][PIECE_KING])
                 move_kingatk(board, board->ptable[i][j], i);
