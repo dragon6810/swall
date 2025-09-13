@@ -90,8 +90,8 @@ void tests_movegen(void)
         printf("\tchecks: %d.\n", ncheck);
     }
 
-    printf("time spent generating pseudo legal: %lfms (%d%%).\n", 
-        mspseudo, (int) (mspseudo / (mspseudo + mspingen) * 100));
-    printf("time spent generating pins: %lfms (%d%%).\n", 
-        mspingen, (int) (mspingen / (mspseudo + mspingen) * 100));
+    printf("time spent generating moves: %lfms (%d%%).\n", 
+        msmovegen, (int) (msmovegen / (msmovegen + msmove) * 100));
+    printf("time spent making moves: %lfms (%d%%).\n", 
+        msmove, (int) (msmove / (msmovegen + msmove) * 100));
 }

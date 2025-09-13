@@ -7,7 +7,7 @@
 
 int sweeptable[BOARD_AREA][DIR_COUNT];
 
-double mspingen = 0;
+double msmove = 0;
 
 void move_domove(board_t* board, move_t move)
 {
@@ -100,7 +100,20 @@ void move_domove(board_t* board, move_t move)
     move_findpins(board);
     board_findcheck(board);
 
-    mspingen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
+    if(board->check[board->tomove])
+    {
+        printf("legality pruning failed!\n");
+        printf("%s moved %c%c -> %c%c into check:\n", board->tomove ? "black" : "white",
+            'a' + src % BOARD_LEN, '1' + src / BOARD_LEN, 'a' + dst % BOARD_LEN, '1' + dst / BOARD_LEN);
+        board_print(board);
+        printf("%s attack:\n", board->tomove ? "white" : "black");
+        board_printbits(board->attacks[!board->tomove]);
+        printf("%s king:\n", board->tomove ? "black" : "white");
+        board_printbits(board->pboards[board->tomove][PIECE_KING]);
+        exit(1);
+    }
+
+    msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
     board->tomove = !board->tomove;
 }
@@ -148,33 +161,17 @@ static inline bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
     return (sqrmask & pin->bits) != 0;
 }
 
-static bool move_islegal(board_t* board, move_t move)
+static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team)
 {
     int i;
     uint8_t dcur;
     pinline_t *curpin;
 
     uint8_t src, dst, type, dstart, dend;
-    team_e team;
-    piece_e ptype;
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
-
-    for(team=0; team<TEAM_COUNT; team++)
-        if(((uint64_t) 1 << src) & board->pboards[team][PIECE_NONE])
-            break;
-
-    if(team >= TEAM_COUNT)
-        return false;
-
-    for(ptype=0; ptype<PIECE_COUNT; ptype++)
-        if(((uint64_t) 1 << src) & board->pboards[team][ptype])
-            break;
-
-    if(ptype >= PIECE_COUNT)
-        return false;
 
     if(ptype == PIECE_KING)
     {
@@ -192,9 +189,9 @@ static bool move_islegal(board_t* board, move_t move)
                 dend = src;
             }
         }
-
+        
         for(dcur=dstart; dcur<=dend; dcur++)
-            if(((uint64_t) 1 << dcur) & board->attacks[!team])
+            if(board->attacks[!team] & (uint64_t) 1 << dcur)
                 return false;
 
         return true;
@@ -218,11 +215,11 @@ static bool move_islegal(board_t* board, move_t move)
     return true;
 }
 
-static moveset_t* move_addiflegal(board_t* board, moveset_t* moves, move_t move)
+static moveset_t* move_addiflegal(board_t* board, moveset_t* moves, move_t move, piece_e ptype, team_e team)
 {
     moveset_t *newmove;
 
-    if(!move_islegal(board, move))
+    if(!move_islegal(board, move, ptype, team))
         return moves;
 
     newmove = malloc(sizeof(moveset_t));
@@ -237,20 +234,14 @@ static moveset_t* move_sweep
 (
     moveset_t* set, board_t* board, 
     uint8_t src, dir_e dir, int max, 
-    bool nocapture, movetype_e type
+    bool nocapture, movetype_e type, 
+    piece_e ptype, team_e team
 )
 {
     int i;
 
-    team_e team;
     int idx;
     move_t move;
-
-    for(team=0; team<TEAM_COUNT; team++)
-        if(((uint64_t) 1 << src) & board->pboards[team][PIECE_NONE])
-            break;
-    if(team >= TEAM_COUNT)
-        return set;
 
     for(i=0, idx=src+diroffs[dir]; i<max; i++, idx+=diroffs[dir])
     {
@@ -265,7 +256,7 @@ static moveset_t* move_sweep
         move = src;
         move |= idx << MOVEBITS_DST_BITS;
         move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-        set = move_addiflegal(board, set, move);
+        set = move_addiflegal(board, set, move, ptype, team);
 
         if(((uint64_t) 1 << idx) & board->pboards[!team][PIECE_NONE])
             break;
@@ -475,7 +466,7 @@ void move_findpins(board_t* board)
     }
 }
 
-static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
+static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
 {
     int i;
     int type;
@@ -485,27 +476,11 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
     int starttype, stoptype;
     dir_e dir, atk[2];
     move_t move;
-    bitboard_t srcmask, dstmask;
-    team_e team;
+    bitboard_t dstmask;
 
-    srcmask = (uint64_t) 1 << src;
     starttype = stoptype = MOVETYPE_DEFAULT;
 
-    if(board->pboards[TEAM_BLACK][PIECE_PAWN] & srcmask)
-    {
-        if(src / BOARD_LEN == 1)
-        {
-            starttype = MOVETYPE_PROMQ;
-            stoptype = MOVETYPE_PROMN;
-        }
-        dbl = (src / BOARD_LEN == BOARD_LEN - 2);
-        dir = DIR_S;
-        atk[0] = DIR_SW;
-        atk[1] = DIR_SE;
-
-        team = TEAM_BLACK;
-    }
-    else
+    if(team == TEAM_WHITE)
     {
         if(src / BOARD_LEN == BOARD_LEN-2)
         {
@@ -516,10 +491,20 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
         dir = DIR_N;
         atk[0] = DIR_NW;
         atk[1] = DIR_NE;
-
-        team = TEAM_WHITE;
     }
-
+    else
+    {
+        if(src / BOARD_LEN == 1)
+        {
+            starttype = MOVETYPE_PROMQ;
+            stoptype = MOVETYPE_PROMN;
+        }
+        dbl = (src / BOARD_LEN == BOARD_LEN - 2);
+        dir = DIR_S;
+        atk[0] = DIR_SW;
+        atk[1] = DIR_SE;
+    }
+    
     dst = src + diroffs[dir];
     dstmask = (uint64_t) 1 << dst;
     if(!((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & dstmask))
@@ -529,7 +514,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
             move = src;
             move |= ((uint16_t)dst) << MOVEBITS_DST_BITS;
             move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-            set = move_addiflegal(board, set, move);
+            set = move_addiflegal(board, set, move, PIECE_PAWN, team);
         }
 
         dst += diroffs[dir];
@@ -538,7 +523,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
         {
             move = src;
             move |= ((uint16_t)dst) << MOVEBITS_DST_BITS;
-            set = move_addiflegal(board, set, move);
+            set = move_addiflegal(board, set, move, PIECE_PAWN, team);
         }
     }
 
@@ -556,7 +541,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
             move |= src;
             move |= dst << MOVEBITS_DST_BITS;
             move |= ((uint16_t)MOVETYPE_ENPAS) << MOVEBITS_TYP_BITS;
-            set = move_addiflegal(board, set, move);
+            set = move_addiflegal(board, set, move, PIECE_PAWN, team);
             
             // no need to check normal attacks since logically the square must be clear
             continue;
@@ -571,25 +556,19 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
             move |= src;
             move |= dst << MOVEBITS_DST_BITS;
             move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-            set = move_addiflegal(board, set, move);
+            set = move_addiflegal(board, set, move, PIECE_PAWN, team);
         }
     }
 
     return set;
 }
 
-static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
+static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
 {
     int i;
 
     int dst;
     move_t move;
-    team_e team;
-
-    if(board->pboards[TEAM_WHITE][PIECE_KNIGHT] & (uint64_t) 1 << src)
-        team = TEAM_WHITE;
-    else
-        team = TEAM_BLACK;
     
     for(i=0; i<8; i++)
     {
@@ -602,37 +581,36 @@ static moveset_t* move_knightmoves(moveset_t* set, board_t* board, uint8_t src)
 
         move = src;
         move |= dst << MOVEBITS_DST_BITS;
-        set = move_addiflegal(board, set, move);
+        set = move_addiflegal(board, set, move, PIECE_KNIGHT, team);
     }
 
     return set;
 }
 
-static moveset_t* move_bishopmoves(moveset_t* set, board_t* board, uint8_t src)
+static moveset_t* move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
 {
     int i;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_BISHOP, team);
 
     return set;
 }
 
-static moveset_t* move_rookmoves(moveset_t* set, board_t* board, uint8_t src)
+static moveset_t* move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
 {
     int i;
 
     for(i=0; i<DIR_NE; i++)
-        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_ROOK, team);
 
     return set;
 }
 
-static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
+static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
 {
     int i;
 
-    team_e team;
     move_t move;
     bitboard_t allpiece;
 
@@ -644,14 +622,14 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
 
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            set = move_sweep(set, board, src, i, 1, false, MOVETYPE_DEFAULT);
+            set = move_sweep(set, board, src, i, 1, false, MOVETYPE_DEFAULT, PIECE_KING, team);
 
     if(board->kcastle[team] && !(allpiece & ((uint64_t) 1 << (src + 1) | (uint64_t) 1 << (src + 2))))
     {
         move = src;
         move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
         move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        set = move_addiflegal(board, set, move);
+        set = move_addiflegal(board, set, move, PIECE_KING, team);
     }
 
     if(board->qcastle[team]
@@ -660,23 +638,23 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src)
         move = src;
         move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
         move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        set = move_addiflegal(board, set, move);
+        set = move_addiflegal(board, set, move, PIECE_KING, team);
     }
 
     return set;
 }
 
-static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src)
+static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
 {
     int i;
 
     for(i=0; i<DIR_COUNT; i++)
-        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT);
+        set = move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_QUEEN, team);
 
     return set;
 }
 
-double mspseudo = 0;
+double msmovegen = 0;
 
 moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
 {
@@ -686,20 +664,37 @@ moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
     start = clock();
 
     srcmask = (uint64_t) 1 << src;
-    if((board->pboards[TEAM_WHITE][PIECE_KING] | board->pboards[TEAM_BLACK][PIECE_KING]) & srcmask)
-        moves = move_kingmoves(moves, board, src);
-    else if((board->pboards[TEAM_WHITE][PIECE_QUEEN] | board->pboards[TEAM_BLACK][PIECE_QUEEN]) & srcmask)
-        moves = move_queenmoves(moves, board, src);
-    else if((board->pboards[TEAM_WHITE][PIECE_ROOK] | board->pboards[TEAM_BLACK][PIECE_ROOK]) & srcmask)
-        moves = move_rookmoves(moves, board, src);
-    else if((board->pboards[TEAM_WHITE][PIECE_BISHOP] | board->pboards[TEAM_BLACK][PIECE_BISHOP]) & srcmask)
-        moves = move_bishopmoves(moves, board, src);
-    else if((board->pboards[TEAM_WHITE][PIECE_KNIGHT] | board->pboards[TEAM_BLACK][PIECE_KNIGHT]) & srcmask)
-        moves = move_knightmoves(moves, board, src);
-    else if((board->pboards[TEAM_WHITE][PIECE_PAWN] | board->pboards[TEAM_BLACK][PIECE_PAWN]) & srcmask)
-        moves = move_pawnmoves(moves, board, src);
+         if(board->pboards[TEAM_WHITE][PIECE_KING] & srcmask)
+        moves = move_kingmoves(moves, board, src, TEAM_WHITE);
+    else if(board->pboards[TEAM_BLACK][PIECE_KING] & srcmask)
+        moves = move_kingmoves(moves, board, src, TEAM_BLACK);
 
-    mspseudo += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
+    else if(board->pboards[TEAM_WHITE][PIECE_QUEEN] & srcmask)
+        moves = move_queenmoves(moves, board, src, TEAM_WHITE);
+    else if(board->pboards[TEAM_BLACK][PIECE_QUEEN] & srcmask)
+        moves = move_queenmoves(moves, board, src, TEAM_BLACK);
+
+    else if(board->pboards[TEAM_WHITE][PIECE_ROOK] & srcmask)
+        moves = move_rookmoves(moves, board, src, TEAM_WHITE);
+    else if(board->pboards[TEAM_BLACK][PIECE_ROOK] & srcmask)
+        moves = move_rookmoves(moves, board, src, TEAM_BLACK);
+
+    else if(board->pboards[TEAM_WHITE][PIECE_BISHOP] & srcmask)
+        moves = move_bishopmoves(moves, board, src, TEAM_WHITE);
+    else if(board->pboards[TEAM_BLACK][PIECE_BISHOP] & srcmask)
+        moves = move_bishopmoves(moves, board, src, TEAM_BLACK);
+
+    else if(board->pboards[TEAM_WHITE][PIECE_KNIGHT] & srcmask)
+        moves = move_knightmoves(moves, board, src, TEAM_WHITE);
+    else if(board->pboards[TEAM_BLACK][PIECE_KNIGHT] & srcmask)
+        moves = move_knightmoves(moves, board, src, TEAM_BLACK);
+
+    else if(board->pboards[TEAM_WHITE][PIECE_PAWN] & srcmask)
+        moves = move_pawnmoves(moves, board, src, TEAM_WHITE);
+    else if(board->pboards[TEAM_BLACK][PIECE_PAWN] & srcmask)
+        moves = move_pawnmoves(moves, board, src, TEAM_BLACK);
+
+    msmovegen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
     return moves;
 }

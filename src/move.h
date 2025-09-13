@@ -40,7 +40,7 @@ typedef struct moveset_s
     struct moveset_s *next;
 } moveset_t;
 
-extern double mspseudo, mspingen;
+extern double msmovegen, msmove;
 
 void move_domove(board_t* board, move_t move);
 void move_findattacks(board_t* board);
