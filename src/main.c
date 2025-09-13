@@ -20,6 +20,7 @@ int main(int argc, char** argv)
     uint8_t sqrs[2];
     move_t move, *pmove;
     moveset_t *moves;
+    mademove_t mademove;
 
     setlocale(LC_ALL, ""); 
 
@@ -118,7 +119,7 @@ int main(int argc, char** argv)
                 }
             }
 
-            move_domove(&board, *pmove);
+            move_domove(&board, *pmove, &mademove);
 
             board_print(&board);
 

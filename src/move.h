@@ -40,9 +40,19 @@ typedef struct moveset_s
     struct moveset_s *next;
 } moveset_t;
 
+typedef struct mademove_s
+{
+    move_t move;
+    piece_e captured; // PIECE_NONE if nothing was captured
+    uint8_t enpas;
+    bool kcastle[TEAM_COUNT];
+    bool qcastle[TEAM_COUNT];
+} mademove_t;
+
 extern double msmovegen, msmove;
 
-void move_domove(board_t* board, move_t move);
+void move_domove(board_t* board, move_t move, mademove_t* outmove);
+void move_undomove(board_t* board, const mademove_t* move);
 void move_findattacks(board_t* board);
 // doesn't clear existing pins
 void move_findpins(board_t* board);

@@ -10,48 +10,49 @@
 
 int ncap, nenpas, ncastle, nprom, ncheck;
 
-static int tests_movegen_r(board_t* board, int depth, move_t* move)
+static int tests_movegen_r(board_t* board, int depth)
 {
     moveset_t *cur;
 
-    board_t newboard;
     moveset_t *set;
+    mademove_t mademove;
     int dst;
     int count;
-
-    memcpy(&newboard, board, sizeof(board_t));
-
-    if(move)
-        dst = (*move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-    if(!depth && move 
-    && ((board->pboards[TEAM_BLACK][PIECE_NONE] | board->pboards[TEAM_WHITE][PIECE_NONE]) & (uint64_t) 1 << dst))
-        ncap++;
-
-    if(!depth && move && ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_ENPAS)
-        nenpas++;
-
-    if(!depth && move && ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_CASTLE)
-        ncastle++;
-
-    if(!depth && move && (((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMQ
-    || ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMR
-    || ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMB
-    || ((*move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMN))
-        nprom++;
-    
-    if(move)
-        move_domove(&newboard, *move);
-
-    if(!depth && board->check[board->tomove])
-        ncheck++;
 
     if(!depth)
         return 1;
 
-    set = move_alllegal(&newboard);
+    set = move_alllegal(board);
 
     for(cur=set, count=0; cur; cur=cur->next)
-        count += tests_movegen_r(&newboard, depth - 1, &cur->move);
+    {
+        move_domove(board, cur->move, &mademove);
+
+        dst = (cur->move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+        if(depth == 1 && (board->pboards[TEAM_BLACK][PIECE_NONE] | board->pboards[TEAM_WHITE][PIECE_NONE]) & (uint64_t) 1 << dst)
+            ncap++;
+
+        if(depth == 1 && ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_ENPAS)
+        {
+            ncap++;
+            nenpas++;
+        }
+
+        if(depth == 1 && ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_CASTLE)
+            ncastle++;
+
+        if(depth == 1 && (((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMQ
+        || ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMR
+        || ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMB
+        || ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMN))
+            nprom++;
+
+        if(depth == 1 && board->check[board->tomove])
+            ncheck++;
+
+        count += tests_movegen_r(board, depth - 1);
+        move_undomove(board, &mademove);
+    }
 
     move_freeset(set);
 
@@ -68,17 +69,17 @@ void tests_movegen(void)
 
     memset(&board, 0, sizeof(board_t));
 
-    board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    board_loadfen(&board, "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
     board_findpieces(&board);
     move_findattacks(&board);
     move_findpins(&board);
 
-    for(i=1; i<=6; i++)
+    for(i=1; i<=4; i++)
     {
         ncap = nenpas = ncastle = nprom = ncheck = 0;
     
         start = clock();
-        count = tests_movegen_r(&board, i, NULL);
+        count = tests_movegen_r(&board, i);
         stop = clock();
 
         printf("depth %d: %d moves (%fms).\n", i, count, 

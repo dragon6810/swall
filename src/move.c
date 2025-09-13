@@ -1,5 +1,6 @@
 #include "move.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,31 +10,43 @@ int sweeptable[BOARD_AREA][DIR_COUNT];
 
 double msmove = 0;
 
-void move_domove(board_t* board, move_t move)
+void move_domove(board_t* board, move_t move, mademove_t* outmove)
 {
     int type, src, dst;
     team_e team;
     piece_e ptype, newtype, captype;
+    bitboard_t srcmask, dstmask, cstlsrc, cstldst;
     int enpasoffs;
     clock_t start;
 
     start = clock();
+
+    outmove->move = move;
+    outmove->captured = PIECE_NONE;
+    outmove->enpas = board->enpas;
+    outmove->kcastle[0] = board->kcastle[0];
+    outmove->kcastle[1] = board->kcastle[1];
+    outmove->qcastle[0] = board->qcastle[0];
+    outmove->qcastle[1] = board->qcastle[1];
     
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
 
-    for(team=0; team<TEAM_COUNT; team++)
-        if(board->pboards[team][PIECE_NONE] & (uint64_t) 1 << src)
-            break;
+    srcmask = (uint64_t) 1 << src;
+    dstmask = (uint64_t) 1 << dst;
+
+    team = board->tomove;
 
     for(ptype=PIECE_KING; ptype<PIECE_COUNT; ptype++)
-        if(board->pboards[team][ptype] & (uint64_t) 1 << src)
+        if(board->pboards[team][ptype] & srcmask)
             break;
+    assert(ptype < PIECE_COUNT);
 
     enpasoffs = board->tomove == TEAM_WHITE ? diroffs[DIR_S] : diroffs[DIR_N];
     if(type == MOVETYPE_ENPAS)
     {
+        outmove->captured = PIECE_PAWN;
         board->pboards[!team][PIECE_NONE] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
         board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
     }
@@ -59,19 +72,20 @@ void move_domove(board_t* board, move_t move)
         // kingside
         if(dst > src)
         {
-            board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst - 1);
-            board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst + 1);
-            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst - 1);
-            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst + 1);
+            cstlsrc = (uint64_t) 1 << (dst + 1);
+            cstldst = (uint64_t) 1 << (dst - 1);
         }
         // queenside
         else
         {
-            board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst - 2);
-            board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst + 1);
-            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst - 2);
-            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst + 1);
+            cstlsrc = (uint64_t) 1 << (dst - 2);
+            cstldst = (uint64_t) 1 << (dst + 1);
         }
+
+        board->pboards[team][PIECE_ROOK] ^= cstlsrc;
+        board->pboards[team][PIECE_NONE] ^= cstlsrc;
+        board->pboards[team][PIECE_ROOK] ^= cstldst;
+        board->pboards[team][PIECE_NONE] ^= cstldst;
     }
 
     switch(type)
@@ -86,36 +100,146 @@ void move_domove(board_t* board, move_t move)
         newtype = ptype;
     }
 
-    board->pboards[team][ptype] ^= (uint64_t) 1 << src;
-    board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << src;
-    board->pboards[team][newtype] |= (uint64_t) 1 << dst;
-    board->pboards[team][PIECE_NONE] |= (uint64_t) 1 << dst;
+    board->pboards[team][ptype] ^= srcmask;
+    board->pboards[team][PIECE_NONE] ^= srcmask;
+    board->pboards[team][newtype] |= dstmask;
+    board->pboards[team][PIECE_NONE] |= dstmask;
 
-    if(board->pboards[!team][PIECE_NONE] & (uint64_t) 1 << dst)
-        for(captype=0; captype<PIECE_COUNT; captype++)
-            board->pboards[!team][captype] &= ~((uint64_t) 1 << dst);
+    if(board->pboards[!team][PIECE_NONE] & dstmask)
+    {
+        // we can never capture the king, so start at queen instead
+        for(captype=PIECE_QUEEN; captype<PIECE_COUNT; captype++)
+        {
+            if(!(board->pboards[!team][captype] & dstmask))
+                continue;
+
+            board->pboards[!team][captype] ^= dstmask;
+            board->pboards[!team][PIECE_NONE] ^= dstmask;
+            outmove->captured = captype;
+            break;
+        }
+    }
+
+    board->tomove = !board->tomove;
+    
+    board_findpieces(board);
+    move_findattacks(board);
+    move_findpins(board);
+    board_findcheck(board);
+
+    if(board->check[!board->tomove])
+    {
+        printf("legality pruning failed!\n");
+        printf("%s moved %c%c -> %c%c into check:\n", !board->tomove ? "black" : "white",
+            'a' + src % BOARD_LEN, '1' + src / BOARD_LEN, 'a' + dst % BOARD_LEN, '1' + dst / BOARD_LEN);
+        board_print(board);
+        printf("%s attack:\n", !board->tomove ? "white" : "black");
+        board_printbits(board->attacks[board->tomove]);
+        printf("%s king:\n", !board->tomove ? "black" : "white");
+        board_printbits(board->pboards[!board->tomove][PIECE_KING]);
+        exit(1);
+    }
+
+    msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
+}
+
+// there's a lot of repeated code from move_domove.
+// maybe figure out how to generalize this.
+void move_undomove(board_t* board, const mademove_t* move)
+{
+    int type, src, dst;
+    team_e team;
+    piece_e ptype, oldtype;
+    bitboard_t srcmask, dstmask, cstlsrc, cstldst;
+    int enpasoffs;
+    clock_t start;
+
+    start = clock();
+
+    board->enpas = move->enpas;
+    board->kcastle[0] = move->kcastle[0];
+    board->kcastle[1] = move->kcastle[1];
+    board->qcastle[0] = move->qcastle[0];
+    board->qcastle[1] = move->qcastle[1];
+    
+    src = move->move & MOVEBITS_SRC_MASK;
+    dst = (move->move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    type = (move->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+
+    srcmask = (uint64_t) 1 << src;
+    dstmask = (uint64_t) 1 << dst;
+
+    team = !board->tomove;
+
+    for(ptype=PIECE_KING; ptype<PIECE_COUNT; ptype++)
+        if(board->pboards[team][ptype] & dstmask)
+            break;
+    if(ptype >= PIECE_COUNT)
+    {
+        printf("undo %c%c -> %c%c.\n", 
+        'a' + src % BOARD_LEN, '1' + src / BOARD_LEN, 'a' + dst % BOARD_LEN, '1' + dst / BOARD_LEN);
+        board_print(board);
+        abort();
+    }
+
+    if(type == MOVETYPE_CASTLE)
+    {
+        // kingside
+        if(dst > src)
+        {
+            cstlsrc = (uint64_t) 1 << (dst + 1);
+            cstldst = (uint64_t) 1 << (dst - 1);
+        }
+        // queenside
+        else
+        {
+            cstlsrc = (uint64_t) 1 << (dst - 2);
+            cstldst = (uint64_t) 1 << (dst + 1);
+        }
+
+        board->pboards[team][PIECE_ROOK] ^= cstlsrc;
+        board->pboards[team][PIECE_NONE] ^= cstlsrc;
+        board->pboards[team][PIECE_ROOK] ^= cstldst;
+        board->pboards[team][PIECE_NONE] ^= cstldst;
+    }
+
+    switch(type)
+    {
+    case MOVETYPE_PROMQ:
+    case MOVETYPE_PROMR:
+    case MOVETYPE_PROMB:
+    case MOVETYPE_PROMN:
+        oldtype = PIECE_PAWN;
+        break;
+    default:
+        oldtype = ptype;
+    }
+
+    board->pboards[team][PIECE_NONE] ^= dstmask;
+    board->pboards[team][ptype] ^= dstmask;
+    board->pboards[team][PIECE_NONE] ^= srcmask;
+    board->pboards[team][oldtype] ^= srcmask;
+
+    if(type == MOVETYPE_ENPAS)
+    {
+        enpasoffs = team == TEAM_WHITE ? diroffs[DIR_S] : diroffs[DIR_N];
+        board->pboards[!team][PIECE_NONE] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
+        board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
+    }
+    else if(move->captured)
+    {
+        board->pboards[!team][move->captured] ^= dstmask;
+        board->pboards[!team][PIECE_NONE] ^= dstmask;
+    }
+    
+    board->tomove = team;
 
     board_findpieces(board);
     move_findattacks(board);
     move_findpins(board);
     board_findcheck(board);
 
-    if(board->check[board->tomove])
-    {
-        printf("legality pruning failed!\n");
-        printf("%s moved %c%c -> %c%c into check:\n", board->tomove ? "black" : "white",
-            'a' + src % BOARD_LEN, '1' + src / BOARD_LEN, 'a' + dst % BOARD_LEN, '1' + dst / BOARD_LEN);
-        board_print(board);
-        printf("%s attack:\n", board->tomove ? "white" : "black");
-        board_printbits(board->attacks[!board->tomove]);
-        printf("%s king:\n", board->tomove ? "black" : "white");
-        board_printbits(board->pboards[board->tomove][PIECE_KING]);
-        exit(1);
-    }
-
     msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
-
-    board->tomove = !board->tomove;
 }
 
 // 0 <= idx < 8
@@ -701,10 +825,6 @@ static moveset_t* move_kingmoves(moveset_t* set, board_t* board, uint8_t src, te
 
     move_t move;
     bitboard_t allpiece;
-
-    team = TEAM_WHITE;
-    if(board->pboards[TEAM_BLACK][PIECE_NONE] & (uint64_t) 1 << src)
-        team = TEAM_BLACK;
 
     allpiece = board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE];
 
