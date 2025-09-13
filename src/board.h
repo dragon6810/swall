@@ -9,9 +9,6 @@
 
 #define FEN_MAX 92
 
-#define PIECE_MASK_COLOR 0x8
-#define PIECE_MASK_TYPE  0x7
-
 #define PIECE_MAX 16
 
 typedef enum
@@ -25,9 +22,6 @@ typedef enum
     PIECE_PAWN,
     PIECE_COUNT,
 } piece_e;
-
-// 0000 (0 = white, 1 = black) type
-typedef uint8_t piece_t;
 
 typedef enum
 {

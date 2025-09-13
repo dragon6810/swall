@@ -61,12 +61,16 @@ void move_domove(board_t* board, move_t move)
         {
             board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst - 1);
             board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst + 1);
+            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst - 1);
+            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst + 1);
         }
         // queenside
         else
         {
             board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst - 2);
             board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst + 1);
+            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst - 1);
+            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst + 1);
         }
     }
 
@@ -280,7 +284,7 @@ static void move_sweepatk(board_t* board, bitboard_t* bits, uint8_t src, dir_e d
     {
         *bits |= (uint64_t) 1 << idx;
 
-        if((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & PIECE_MASK_TYPE)
+        if((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & (uint64_t) 1 << idx)
             break;
     }
 }
@@ -363,7 +367,7 @@ static void move_kingatk(board_t* board, uint8_t src, team_e team)
     
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
+            move_sweepatk(board, &board->attacks[team], src, i, 1);
 }
 
 void move_findattacks(board_t* board)
@@ -518,7 +522,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 
     dst = src + diroffs[dir];
     dstmask = (uint64_t) 1 << dst;
-    if(!((board->ptable[dst][TEAM_WHITE] | board->ptable[dst][TEAM_BLACK]) & dstmask))
+    if(!((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & dstmask))
     {
         for(type=starttype; type<=stoptype; type++)
         {
@@ -530,7 +534,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
 
         dst += diroffs[dir];
         dstmask = (uint64_t) 1 << dst;
-        if(dbl && !((board->ptable[dst][TEAM_WHITE] | board->ptable[dst][TEAM_BLACK]) & dstmask))
+        if(dbl && !((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & dstmask))
         {
             move = src;
             move |= ((uint16_t)dst) << MOVEBITS_DST_BITS;
@@ -558,7 +562,7 @@ static moveset_t* move_pawnmoves(moveset_t* set, board_t* board, uint8_t src)
             continue;
         }
 
-        if(!(board->ptable[dst][!team] & dstmask))
+        if(!(board->pboards[!team][PIECE_NONE] & dstmask))
             continue;
         
         for(type=starttype; type<=stoptype; type++)

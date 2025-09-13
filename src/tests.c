@@ -43,13 +43,7 @@ static int tests_movegen_r(board_t* board, int depth, move_t* move)
         move_domove(&newboard, *move);
 
     if(!depth && board->check[board->tomove])
-    {
-        printf("check %d (%s in check):\n", ncheck, board->tomove ? "black" : "white");
-        board_print(&newboard);
-        board_printbits(newboard.attacks[!board->tomove]);
-        abort();
         ncheck++;
-    }
 
     if(!depth)
         return 1;
