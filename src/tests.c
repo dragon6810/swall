@@ -73,7 +73,7 @@ void tests_movegen(void)
     move_findattacks(&board);
     move_findpins(&board);
 
-    for(i=1; i<=4; i++)
+    for(i=1; i<=5; i++)
     {
         ncap = nenpas = ncastle = nprom = ncheck = 0;
     

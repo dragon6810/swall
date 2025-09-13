@@ -439,6 +439,40 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
     board->pins[team][board->npins[team]++] = line;
 }
 
+static void move_knightpin(board_t* board, team_e team, uint8_t src)
+{
+    int i;
+
+    int dst;
+    bitboard_t dstmask;
+    pinline_t *line;
+
+    for(i=0; i<8; i++)
+    {
+        dst = move_knightoffs(i, src);
+        if(dst < 0)
+            continue;
+
+        dstmask = (uint64_t) 1 < dst;
+        if(!(dstmask & board->pboards[!team][PIECE_KING]))
+            continue;
+
+        if(board->npins[team] >= PIECE_MAX)
+        {
+            printf("move_knightpin: max pins reached! max is %d.\n", PIECE_MAX);
+            exit(1);
+        }
+
+        line = &board->pins[team][board->npins[team]++];
+        line->bits = dstmask;
+        line->end = dst;
+        line->start = src;
+        line->nblocks = 0;
+
+        break;
+    }
+}
+
 void move_findpins(board_t* board)
 {
     int i, j;
@@ -458,10 +492,12 @@ void move_findpins(board_t* board)
 
             if(board->pboards[i][PIECE_QUEEN] & pmask)
                 for(dir=0; dir<DIR_COUNT; dir++) move_sweeppin(board, i, dir, board->ptable[i][j]);
-            if(board->pboards[i][PIECE_ROOK] & pmask)
+            else if(board->pboards[i][PIECE_ROOK] & pmask)
                 for(dir=0; dir<DIR_NE; dir++) move_sweeppin(board, i, dir, board->ptable[i][j]);
-            if(board->pboards[i][PIECE_BISHOP] & pmask)
+            else if(board->pboards[i][PIECE_BISHOP] & pmask)
                 for(dir=DIR_NE; dir<DIR_COUNT; dir++) move_sweeppin(board, i, dir, board->ptable[i][j]);
+            else if(board->pboards[i][PIECE_KNIGHT] & pmask)
+                move_knightpin(board, i, board->ptable[i][j]);
         }
     }
 }
