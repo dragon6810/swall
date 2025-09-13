@@ -93,6 +93,6 @@ void tests_movegen(void)
 
     printf("time spent generating moves: %lfms (%d%%).\n", 
         msmovegen, (int) (msmovegen / (msmovegen + msmove) * 100));
-    printf("time spent making moves: %lfms (%d%%).\n", 
+    printf("time spent making/unmaking moves: %lfms (%d%%).\n", 
         msmove, (int) (msmove / (msmovegen + msmove) * 100));
 }

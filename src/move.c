@@ -28,6 +28,13 @@ void move_domove(board_t* board, move_t move, mademove_t* outmove)
     outmove->kcastle[1] = board->kcastle[1];
     outmove->qcastle[0] = board->qcastle[0];
     outmove->qcastle[1] = board->qcastle[1];
+
+    memcpy(outmove->npiece, board->npiece, sizeof(board->npiece));
+    memcpy(outmove->ptable, board->ptable, sizeof(board->ptable));
+    memcpy(outmove->attacks, board->attacks, sizeof(board->attacks));
+    memcpy(outmove->npins, board->npins, sizeof(board->npins));
+    memcpy(outmove->pins, board->pins, sizeof(board->pins));
+    memcpy(outmove->check, board->check, sizeof(board->check));
     
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -234,10 +241,12 @@ void move_undomove(board_t* board, const mademove_t* move)
     
     board->tomove = team;
 
-    board_findpieces(board);
-    move_findattacks(board);
-    move_findpins(board);
-    board_findcheck(board);
+    memcpy(board->npiece, move->npiece, sizeof(board->npiece));
+    memcpy(board->ptable, move->ptable, sizeof(board->ptable));
+    memcpy(board->attacks, move->attacks, sizeof(board->attacks));
+    memcpy(board->npins, move->npins, sizeof(board->npins));
+    memcpy(board->pins, move->pins, sizeof(board->pins));
+    memcpy(board->check, move->check, sizeof(board->check));
 
     msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 }

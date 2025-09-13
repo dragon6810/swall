@@ -47,6 +47,13 @@ typedef struct mademove_s
     uint8_t enpas;
     bool kcastle[TEAM_COUNT];
     bool qcastle[TEAM_COUNT];
+
+    uint8_t npiece[TEAM_COUNT];
+    uint8_t ptable[TEAM_COUNT][PIECE_MAX];
+    bitboard_t attacks[TEAM_COUNT];
+    uint8_t npins[TEAM_COUNT];
+    pinline_t pins[TEAM_COUNT][PIECE_MAX*8];
+    bool check[TEAM_COUNT];
 } mademove_t;
 
 extern double msmovegen, msmove;
