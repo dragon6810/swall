@@ -69,7 +69,7 @@ void move_domove(board_t* board, move_t move)
         {
             board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst - 2);
             board->pboards[team][PIECE_ROOK] ^= (uint64_t) 1 << (dst + 1);
-            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst - 1);
+            board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst - 2);
             board->pboards[team][PIECE_NONE] ^= (uint64_t) 1 << (dst + 1);
         }
     }
@@ -167,6 +167,7 @@ static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team
     uint8_t dcur;
     pinline_t *curpin;
 
+    bitboard_t mask;
     uint8_t src, dst, type, dstart, dend;
 
     src = move & MOVEBITS_SRC_MASK;
@@ -190,11 +191,11 @@ static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team
             }
         }
         
+        mask = 0;
         for(dcur=dstart; dcur<=dend; dcur++)
-            if(board->attacks[!team] & (uint64_t) 1 << dcur)
-                return false;
+            mask |= (uint64_t) 1 << dcur;
 
-        return true;
+        return !(board->attacks[!team] & mask);
     }
 
     for(i=0, curpin=board->pins[!team]; i<board->npins[!team]; i++, curpin++)
@@ -265,17 +266,20 @@ static moveset_t* move_sweep
     return set;
 }
 
-static void move_sweepatk(board_t* board, bitboard_t* bits, uint8_t src, dir_e dir, int max)
+static void move_sweepatk(board_t* board, bitboard_t* bits, uint8_t src, dir_e dir, int max, team_e team)
 {
     int i;
 
     int idx;
+    bitboard_t mask;
 
     for(i=0, idx=src+diroffs[dir]; i<max; i++, idx+=diroffs[dir])
     {
-        *bits |= (uint64_t) 1 << idx;
+        mask = (uint64_t) 1 << idx;
+        *bits |= mask;
 
-        if((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & (uint64_t) 1 << idx)
+        if((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & mask
+        && !(board->pboards[!team][PIECE_KING] & mask)) // should "go through" enemy king so they cant just backstep
             break;
     }
 }
@@ -333,7 +337,7 @@ static void move_bishopatk(board_t* board, uint8_t src, team_e team)
     int i;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
+        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i], team);
 }
 
 static void move_rookatk(board_t* board, uint8_t src, team_e team)
@@ -341,7 +345,7 @@ static void move_rookatk(board_t* board, uint8_t src, team_e team)
     int i;
 
     for(i=0; i<DIR_NE; i++)
-        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
+        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i], team);
 }
 
 static void move_queenatk(board_t* board, uint8_t src, team_e team)
@@ -349,7 +353,7 @@ static void move_queenatk(board_t* board, uint8_t src, team_e team)
     int i;
 
     for(i=0; i<DIR_COUNT; i++)
-        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i]);
+        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i], team);
 }
 
 static void move_kingatk(board_t* board, uint8_t src, team_e team)
@@ -358,7 +362,7 @@ static void move_kingatk(board_t* board, uint8_t src, team_e team)
     
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            move_sweepatk(board, &board->attacks[team], src, i, 1);
+            move_sweepatk(board, &board->attacks[team], src, i, 1, team);
 }
 
 void move_findattacks(board_t* board)
@@ -439,6 +443,52 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
     board->pins[team][board->npins[team]++] = line;
 }
 
+static void move_pawnpin(board_t* board, team_e team, uint8_t src)
+{
+    int i;
+
+    int dst;
+    bitboard_t dstmask;
+    pinline_t *line;
+    dir_e dirs[2];
+
+    if(team == TEAM_WHITE)
+    {
+        dirs[0] = DIR_NW;
+        dirs[1] = DIR_NE;
+    }
+    else
+    {
+        dirs[0] = DIR_SW;
+        dirs[1] = DIR_SE;
+    }
+
+    for(i=0; i<2; i++)
+    {
+        dst = src + diroffs[dirs[i]];
+        if(abs(dst / BOARD_LEN - src / BOARD_LEN) != 1)
+            continue;
+
+        dstmask = (uint64_t) 1 << dst;
+        if(!(dstmask & board->pboards[!team][PIECE_KING]))
+            continue;
+
+        if(board->npins[team] >= PIECE_MAX)
+        {
+            printf("move_pawnpin: max pins reached! max is %d.\n", PIECE_MAX);
+            exit(1);
+        }
+
+        line = &board->pins[team][board->npins[team]++];
+        line->bits = dstmask;
+        line->end = dst;
+        line->start = src;
+        line->nblocks = 0;
+
+        break;
+    }
+}
+
 static void move_knightpin(board_t* board, team_e team, uint8_t src)
 {
     int i;
@@ -453,7 +503,7 @@ static void move_knightpin(board_t* board, team_e team, uint8_t src)
         if(dst < 0)
             continue;
 
-        dstmask = (uint64_t) 1 < dst;
+        dstmask = (uint64_t) 1 << dst;
         if(!(dstmask & board->pboards[!team][PIECE_KING]))
             continue;
 
@@ -498,6 +548,8 @@ void move_findpins(board_t* board)
                 for(dir=DIR_NE; dir<DIR_COUNT; dir++) move_sweeppin(board, i, dir, board->ptable[i][j]);
             else if(board->pboards[i][PIECE_KNIGHT] & pmask)
                 move_knightpin(board, i, board->ptable[i][j]);
+            else if(board->pboards[i][PIECE_PAWN] & pmask)
+                move_pawnpin(board, i, board->ptable[i][j]);
         }
     }
 }
