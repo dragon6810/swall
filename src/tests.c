@@ -26,11 +26,11 @@ static int tests_movegen_r(board_t* board, int depth)
 
     for(cur=set, count=0; cur; cur=cur->next)
     {
-        move_domove(board, cur->move, &mademove);
-
         dst = (cur->move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
         if(depth == 1 && (board->pboards[TEAM_BLACK][PIECE_NONE] | board->pboards[TEAM_WHITE][PIECE_NONE]) & (uint64_t) 1 << dst)
             ncap++;
+
+        move_domove(board, cur->move, &mademove);
 
         if(depth == 1 && ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_ENPAS)
         {
@@ -74,7 +74,7 @@ void tests_movegen(void)
     move_findattacks(&board);
     move_findpins(&board);
 
-    for(i=1; i<=4; i++)
+    for(i=1; i<=5; i++)
     {
         ncap = nenpas = ncastle = nprom = ncheck = 0;
     

@@ -123,6 +123,15 @@ void move_domove(board_t* board, move_t move, mademove_t* outmove)
             board->pboards[!team][captype] ^= dstmask;
             board->pboards[!team][PIECE_NONE] ^= dstmask;
             outmove->captured = captype;
+            
+            if(captype == PIECE_ROOK)
+            {
+                if(dst % BOARD_LEN > BOARD_LEN / 2)
+                    board->kcastle[!team] = false;
+                else
+                    board->qcastle[!team] = false;
+            }
+
             break;
         }
     }
