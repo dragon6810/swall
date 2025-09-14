@@ -57,7 +57,7 @@ int16_t brain_search(board_t* board, int depth, move_t* outmove)
     if(!depth)
         return brain_eval(board);
 
-    besteval = INT16_MIN;
+    besteval = INT16_MIN + 1;
     moves = move_alllegal(board);
 
     if(!moves)
@@ -93,6 +93,5 @@ void brain_dobestmove(board_t* board)
     mademove_t mademove;
 
     brain_search(board, 5, &move);
-
     move_domove(board, move, &mademove);
 }
