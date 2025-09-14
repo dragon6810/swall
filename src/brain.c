@@ -92,7 +92,7 @@ void brain_dobestmove(board_t* board)
     move_t move;
     mademove_t mademove;
 
-    brain_search(board, 4, &move);
+    brain_search(board, 5, &move);
 
     move_domove(board, move, &mademove);
 }
