@@ -8,7 +8,7 @@
 #include "board.h"
 #include "move.h"
 
-int ncap, nenpas, ncastle, nprom, ncheck;
+double msmovegen = 0, msmove = 0, msundo;
 
 static int tests_movegen_r(board_t* board, int depth)
 {
@@ -16,42 +16,31 @@ static int tests_movegen_r(board_t* board, int depth)
 
     moveset_t *set;
     mademove_t mademove;
-    int dst;
     int count;
+    clock_t start;
 
     if(!depth)
         return 1;
 
+    start = clock();
     set = move_alllegal(board);
+    msmovegen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
     for(cur=set, count=0; cur; cur=cur->next)
     {
-        dst = (cur->move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-        if(depth == 1 && (board->pboards[TEAM_BLACK][PIECE_NONE] | board->pboards[TEAM_WHITE][PIECE_NONE]) & (uint64_t) 1 << dst)
-            ncap++;
-
-        move_domove(board, cur->move, &mademove);
-
-        if(depth == 1 && ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_ENPAS)
+        if(depth == 1)
         {
-            ncap++;
-            nenpas++;
+            count++;
+            continue;
         }
 
-        if(depth == 1 && ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_CASTLE)
-            ncastle++;
-
-        if(depth == 1 && (((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMQ
-        || ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMR
-        || ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMB
-        || ((cur->move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMN))
-            nprom++;
-
-        if(depth == 1 && board->check[board->tomove])
-            ncheck++;
-
+        start = clock();
+        move_domove(board, cur->move, &mademove);
+        msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
         count += tests_movegen_r(board, depth - 1);
+        start = clock();
         move_undomove(board, &mademove);
+        msundo += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
     }
 
     move_freeset(set);
@@ -69,30 +58,26 @@ void tests_movegen(void)
 
     memset(&board, 0, sizeof(board_t));
 
-    board_loadfen(&board, "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+    //board_loadfen(&board, "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+    board_loadfen(&board, "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
     board_findpieces(&board);
     move_findattacks(&board);
     move_findpins(&board);
 
     for(i=1; i<=5; i++)
     {
-        ncap = nenpas = ncastle = nprom = ncheck = 0;
-    
         start = clock();
         count = tests_movegen_r(&board, i);
         stop = clock();
 
         printf("depth %d: %d moves (%fms).\n", i, count, 
             (double) (stop - start) / CLOCKS_PER_SEC * 1000.0);
-        printf("\tcaptures: %d.\n", ncap);
-        printf("\ten passants: %d.\n", nenpas);
-        printf("\tcastles: %d.\n", ncastle);
-        printf("\tpromotions: %d.\n", nprom);
-        printf("\tchecks: %d.\n", ncheck);
     }
 
     printf("time spent generating moves: %lfms (%d%%).\n", 
-        msmovegen, (int) (msmovegen / (msmovegen + msmove) * 100));
-    printf("time spent making/unmaking moves: %lfms (%d%%).\n", 
-        msmove, (int) (msmove / (msmovegen + msmove) * 100));
+        msmovegen, (int) (msmovegen / (msmovegen + msmove + msundo) * 100));
+    printf("time spent making moves: %lfms (%d%%).\n", 
+        msmove, (int) (msmove / (msmovegen + msmove + msundo) * 100));
+    printf("time spent unmaking moves: %lfms (%d%%).\n", 
+        msundo, (int) (msundo / (msmovegen + msmove + msundo) * 100));
 }

@@ -289,21 +289,21 @@ void board_loadfen(board_t* board, const char* fen)
             board->kcastle[TEAM_WHITE] = true;
             c++;
         }
-        if(*c != 'K' && *c != 'Q' && *c != 'k' && *c != 'q')
+        if(*c != 'K' && *c != 'Q' && *c != 'k' && *c != 'q' && *c != ' ')
             goto badfen;
         if(*c == 'Q')
         {
             board->qcastle[TEAM_WHITE] = true;
             c++;
         }
-        if(*c != 'K' && *c != 'Q' && *c != 'k' && *c != 'q')
+        if(*c != 'K' && *c != 'Q' && *c != 'k' && *c != 'q' && *c != ' ')
             goto badfen;
         if(*c == 'k')
         {
             board->kcastle[TEAM_BLACK] = true;
             c++;
         }
-        if(*c != 'K' && *c != 'Q' && *c != 'k' && *c != 'q')
+        if(*c != 'K' && *c != 'Q' && *c != 'k' && *c != 'q' && *c != ' ')
             goto badfen;
         if(*c == 'q')
         {

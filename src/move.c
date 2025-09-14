@@ -8,8 +8,6 @@
 
 int sweeptable[BOARD_AREA][DIR_COUNT];
 
-double msmove = 0;
-
 void move_domove(board_t* board, move_t move, mademove_t* outmove)
 {
     int type, src, dst;
@@ -17,9 +15,6 @@ void move_domove(board_t* board, move_t move, mademove_t* outmove)
     piece_e ptype, newtype, captype;
     bitboard_t srcmask, dstmask, cstlsrc, cstldst;
     int enpasoffs;
-    clock_t start;
-
-    start = clock();
 
     outmove->move = move;
     outmove->captured = PIECE_NONE;
@@ -155,8 +150,6 @@ void move_domove(board_t* board, move_t move, mademove_t* outmove)
         board_printbits(board->pboards[!board->tomove][PIECE_KING]);
         exit(1);
     }
-
-    msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 }
 
 // there's a lot of repeated code from move_domove.
@@ -168,9 +161,6 @@ void move_undomove(board_t* board, const mademove_t* move)
     piece_e ptype, oldtype;
     bitboard_t srcmask, dstmask, cstlsrc, cstldst;
     int enpasoffs;
-    clock_t start;
-
-    start = clock();
 
     board->enpas = move->enpas;
     board->kcastle[0] = move->kcastle[0];
@@ -256,8 +246,6 @@ void move_undomove(board_t* board, const mademove_t* move)
     memcpy(board->npins, move->npins, sizeof(board->npins));
     memcpy(board->pins, move->pins, sizeof(board->pins));
     memcpy(board->check, move->check, sizeof(board->check));
-
-    msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 }
 
 // 0 <= idx < 8
@@ -880,15 +868,10 @@ static moveset_t* move_queenmoves(moveset_t* set, board_t* board, uint8_t src, t
     return set;
 }
 
-double msmovegen = 0;
-
 moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
 {
-    clock_t start;
     bitboard_t srcmask;
-
-    start = clock();
-
+    
     srcmask = (uint64_t) 1 << src;
          if(board->pboards[TEAM_WHITE][PIECE_KING] & srcmask)
         moves = move_kingmoves(moves, board, src, TEAM_WHITE);
@@ -919,8 +902,6 @@ moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
         moves = move_pawnmoves(moves, board, src, TEAM_WHITE);
     else if(board->pboards[TEAM_BLACK][PIECE_PAWN] & srcmask)
         moves = move_pawnmoves(moves, board, src, TEAM_BLACK);
-
-    msmovegen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
     return moves;
 }
