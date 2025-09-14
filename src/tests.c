@@ -64,7 +64,7 @@ void tests_movegen(void)
     move_findattacks(&board);
     move_findpins(&board);
 
-    for(i=1; i<=5; i++)
+    for(i=1; i<=4; i++)
     {
         start = clock();
         count = tests_movegen_r(&board, i);

@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "board.h"
+#include "brain.h"
 #include "move.h"
 #include "tests.h"
 
@@ -80,8 +81,7 @@ int main(int argc, char** argv)
             move |= sqrs[0];
             move |= ((uint16_t) sqrs[1]) << MOVEBITS_DST_BITS;
 
-            moves = move_legalmoves(&board, NULL, sqrs[0]);
-            move_printset(moves);
+            moves = move_alllegal(&board);
             
             if(!(pmove = move_findmove(moves, move)))
             {
@@ -125,6 +125,9 @@ int main(int argc, char** argv)
 
             move_freeset(moves);
             moves = NULL;
+
+            brain_dobestmove(&board);
+            board_print(&board);
 
             continue;
         }
