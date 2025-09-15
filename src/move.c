@@ -362,7 +362,7 @@ static void move_sweep
     moveset_t* set, board_t* board, 
     uint8_t src, dir_e dir, int max, 
     bool nocapture, movetype_e type, 
-    piece_e ptype, team_e team
+    piece_e ptype, team_e team, bool caponly
 )
 {
     int i;
@@ -380,10 +380,13 @@ static void move_sweep
         if(nocapture && (((uint64_t) 1 << idx) & board->pboards[!team][PIECE_NONE]))
             break;
 
-        move = src;
-        move |= idx << MOVEBITS_DST_BITS;
-        move |= (uint16_t) type << MOVEBITS_TYP_BITS;
-        move_addiflegal(board, set, move, ptype, team);
+        if(!caponly || ((uint64_t) 1 << idx) & board->pboards[!team][PIECE_NONE])
+        {
+            move = src;
+            move |= idx << MOVEBITS_DST_BITS;
+            move |= (uint16_t) type << MOVEBITS_TYP_BITS;
+            move_addiflegal(board, set, move, ptype, team);
+        }
 
         if(((uint64_t) 1 << idx) & board->pboards[!team][PIECE_NONE])
             break;
@@ -678,7 +681,7 @@ void move_findpins(board_t* board)
     }
 }
 
-static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
+static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     int i;
     int type;
@@ -719,7 +722,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     
     dst = src + diroffs[dir];
     dstmask = (uint64_t) 1 << dst;
-    if(!((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & dstmask))
+    if(!caponly && !((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & dstmask))
     {
         for(type=starttype; type<=stoptype; type++)
         {
@@ -773,7 +776,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     }
 }
 
-static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
+static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     int i;
 
@@ -789,29 +792,32 @@ static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e
         if(board->pboards[team][PIECE_NONE] & (uint64_t) 1 << dst)
             continue;
 
+        if(caponly && !(board->pboards[!team][PIECE_NONE] & (uint64_t) 1 << dst))
+            continue;
+
         move = src;
         move |= dst << MOVEBITS_DST_BITS;
         move_addiflegal(board, set, move, PIECE_KNIGHT, team);
     }
 }
 
-static void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
+static void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     int i;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_BISHOP, team);
+        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_BISHOP, team, caponly);
 }
 
-static void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
+static void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     int i;
 
     for(i=0; i<DIR_NE; i++)
-        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_ROOK, team);
+        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_ROOK, team, caponly);
 }
 
-static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
+static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     int i;
 
@@ -822,77 +828,80 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            move_sweep(set, board, src, i, 1, false, MOVETYPE_DEFAULT, PIECE_KING, team);
+            move_sweep(set, board, src, i, 1, false, MOVETYPE_DEFAULT, PIECE_KING, team, caponly);
 
-    if(board->kcastle[team] && !(allpiece & ((uint64_t) 1 << (src + 1) | (uint64_t) 1 << (src + 2))))
+    if(!caponly)
     {
-        move = src;
-        move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
-        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        move_addiflegal(board, set, move, PIECE_KING, team);
-    }
+        if(board->kcastle[team] && !(allpiece & ((uint64_t) 1 << (src + 1) | (uint64_t) 1 << (src + 2))))
+        {
+            move = src;
+            move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
+            move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+            move_addiflegal(board, set, move, PIECE_KING, team);
+        }
 
-    if(board->qcastle[team]
-    && !(allpiece & ((uint64_t) 1 << (src - 1) | (uint64_t) 1 << (src - 2) | (uint64_t) 1 << (src - 3))))
-    {
-        move = src;
-        move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
-        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        move_addiflegal(board, set, move, PIECE_KING, team);
+        if(board->qcastle[team]
+        && !(allpiece & ((uint64_t) 1 << (src - 1) | (uint64_t) 1 << (src - 2) | (uint64_t) 1 << (src - 3))))
+        {
+            move = src;
+            move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
+            move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+            move_addiflegal(board, set, move, PIECE_KING, team);
+        }
     }
 }
 
-static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team)
+static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     int i;
 
     for(i=0; i<DIR_COUNT; i++)
-        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_QUEEN, team);
+        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_QUEEN, team, caponly);
 }
 
-void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src)
+void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
 {
     bitboard_t srcmask;
 
     srcmask = (uint64_t) 1 << src;
          if(board->pboards[TEAM_WHITE][PIECE_KING] & srcmask)
-        move_kingmoves(moves, board, src, TEAM_WHITE);
+        move_kingmoves(moves, board, src, TEAM_WHITE, caponly);
     else if(board->pboards[TEAM_BLACK][PIECE_KING] & srcmask)
-        move_kingmoves(moves, board, src, TEAM_BLACK);
+        move_kingmoves(moves, board, src, TEAM_BLACK, caponly);
 
     else if(board->pboards[TEAM_WHITE][PIECE_QUEEN] & srcmask)
-        move_queenmoves(moves, board, src, TEAM_WHITE);
+        move_queenmoves(moves, board, src, TEAM_WHITE, caponly);
     else if(board->pboards[TEAM_BLACK][PIECE_QUEEN] & srcmask)
-        move_queenmoves(moves, board, src, TEAM_BLACK);
+        move_queenmoves(moves, board, src, TEAM_BLACK, caponly);
 
     else if(board->pboards[TEAM_WHITE][PIECE_ROOK] & srcmask)
-        move_rookmoves(moves, board, src, TEAM_WHITE);
+        move_rookmoves(moves, board, src, TEAM_WHITE, caponly);
     else if(board->pboards[TEAM_BLACK][PIECE_ROOK] & srcmask)
-        move_rookmoves(moves, board, src, TEAM_BLACK);
+        move_rookmoves(moves, board, src, TEAM_BLACK, caponly);
 
     else if(board->pboards[TEAM_WHITE][PIECE_BISHOP] & srcmask)
-        move_bishopmoves(moves, board, src, TEAM_WHITE);
+        move_bishopmoves(moves, board, src, TEAM_WHITE, caponly);
     else if(board->pboards[TEAM_BLACK][PIECE_BISHOP] & srcmask)
-        move_bishopmoves(moves, board, src, TEAM_BLACK);
+        move_bishopmoves(moves, board, src, TEAM_BLACK, caponly);
 
     else if(board->pboards[TEAM_WHITE][PIECE_KNIGHT] & srcmask)
-        move_knightmoves(moves, board, src, TEAM_WHITE);
+        move_knightmoves(moves, board, src, TEAM_WHITE, caponly);
     else if(board->pboards[TEAM_BLACK][PIECE_KNIGHT] & srcmask)
-        move_knightmoves(moves, board, src, TEAM_BLACK);
+        move_knightmoves(moves, board, src, TEAM_BLACK, caponly);
 
     else if(board->pboards[TEAM_WHITE][PIECE_PAWN] & srcmask)
-        move_pawnmoves(moves, board, src, TEAM_WHITE);
+        move_pawnmoves(moves, board, src, TEAM_WHITE, caponly);
     else if(board->pboards[TEAM_BLACK][PIECE_PAWN] & srcmask)
-        move_pawnmoves(moves, board, src, TEAM_BLACK);
+        move_pawnmoves(moves, board, src, TEAM_BLACK, caponly);
 }
 
-void move_alllegal(board_t* board, moveset_t* outmoves)
+void move_alllegal(board_t* board, moveset_t* outmoves, bool caponly)
 {
     int i;
 
     outmoves->count = 0;
     for(i=0; i<board->npiece[board->tomove]; i++)
-        move_legalmoves(board, outmoves, board->ptable[board->tomove][i]);
+        move_legalmoves(board, outmoves, board->ptable[board->tomove][i], caponly);
 }
 
 move_t* move_findmove(moveset_t* set, move_t move)

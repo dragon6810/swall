@@ -175,6 +175,67 @@ static void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores
         outscores[i] = brain_moveguess(board, moves->moves[i]);
 }
 
+static int16_t brain_searchcap(board_t* board, int16_t alpha, int16_t beta)
+{
+    int i, j;
+
+    moveset_t moves;
+    int16_t scores[MAX_MOVE];
+    int scoreowner;
+    int16_t bestscore;
+    int16_t eval;
+    mademove_t mademove;
+    move_t tempmv;
+    int16_t tempscr;
+
+    eval = brain_eval(board);
+    if(eval >= beta)
+        return beta;
+    if(eval > alpha)
+        alpha = eval;
+
+    move_alllegal(board, &moves, true);
+    brain_scoremoves(board, &moves, scores);
+
+    for(i=0; i<moves.count; i++)
+    {
+        scoreowner = i;
+        bestscore = scores[i];
+
+        for(j=i+1; j<moves.count; j++)
+        {
+            if(scores[j] > bestscore)
+            {
+                bestscore = scores[j];
+                scoreowner = j;
+            }
+        }
+
+        if(scoreowner != i)
+        {
+            tempmv = moves.moves[i];
+            moves.moves[i] = moves.moves[scoreowner];
+            moves.moves[scoreowner] = tempmv;
+
+            tempscr = scores[i];
+            scores[i] = scores[scoreowner];
+            scores[scoreowner] = tempscr;
+        }
+
+        move_domove(board, moves.moves[i], &mademove);
+        eval = -brain_searchcap(board, -beta, -alpha);
+        move_undomove(board, &mademove);
+
+        if(eval >= beta)
+            return beta;
+
+        if(eval > alpha)
+            alpha = eval;
+    }
+
+    return alpha;
+}
+
 int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, move_t* outmove)
 {
     int i, j;
@@ -190,9 +251,9 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
     int16_t tempscr;
 
     if(!depth)
-        return brain_eval(board);
+        return brain_searchcap(board, alpha, beta);
 
-    move_alllegal(board, &moves);
+    move_alllegal(board, &moves, false);
     brain_scoremoves(board, &moves, scores);
 
     if(!moves.count)
