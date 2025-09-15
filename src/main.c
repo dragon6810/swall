@@ -7,33 +7,44 @@
 #include "move.h"
 #include "tests.h"
 
-#define MAX_INPUT 64
+#define MAX_INPUT 512
 
 board_t board = {};
 
-int main(int argc, char** argv)
+void uci_cmd_uci(void)
 {
-    int i;
+    printf("id name swall\n");
+    printf("id author Henry Dunn\n");
+    printf("uciok\n");
+}
 
-    char buf[MAX_INPUT];
-    char movestr[2][3];
-    int r, f;
-    uint8_t sqrs[2];
-    move_t move, *pmove;
-    moveset_t moves;
-    mademove_t mademove;
-
-    setlocale(LC_ALL, ""); 
-
-    move_init();
-
-    tests_movegen();
+void uci_main(void)
+{
+    char line[MAX_INPUT];
+    char *c;
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     board_findpieces(&board);
     move_findattacks(&board);
     move_findpins(&board);
 
+    while(1)
+    {
+        if(!fgets(line, sizeof(line), stdin))
+            break;
+        
+        c = line;
+        while(*c++ != '\n');
+        *c = 0;
+
+        if(c == line)
+            continue;
+
+        if(!strncmp(line, "uci", 3))
+            uci_cmd_uci();
+    }
+
+    /*
     board_print(&board);
 
     while(1)
@@ -128,6 +139,18 @@ int main(int argc, char** argv)
         if(buf[0])
             printf("no matching command.\n");
     }
+    */
+}
+
+int main(int argc, char** argv)
+{
+    setlocale(LC_ALL, ""); 
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    move_init();
+    tests_movegen();
+
+    uci_main();
     
     return 0;
 }
