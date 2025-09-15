@@ -159,7 +159,7 @@ void board_printbits(const bitboard_t bits)
     }
 }
 
-void board_loadfen(board_t* board, const char* fen)
+int board_loadfen(board_t* board, const char* fen)
 {
     int i, r, f;
     const char *c;
@@ -336,9 +336,11 @@ void board_loadfen(board_t* board, const char* fen)
 
     // TODO: halfmove and fullmove
 
-    return;
+    return c - fen;
 
 badfen:
     printf("bad fen \"%s\".\n", fen);
     exit(1);
+
+    return c - fen;
 }

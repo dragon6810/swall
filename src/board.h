@@ -76,6 +76,6 @@ void board_findpieces(board_t* board);
 void board_findcheck(board_t* board);
 void board_print(const board_t* board);
 void board_printbits(const bitboard_t bits);
-void board_loadfen(board_t* board, const char* fen);
+int board_loadfen(board_t* board, const char* fen);
 
 #endif

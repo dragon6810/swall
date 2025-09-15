@@ -11,6 +11,90 @@
 
 board_t board = {};
 
+void uci_cmd_position(const char* args)
+{
+    char move[5];
+    move_t *pmove;
+    moveset_t moves;
+    mademove_t mademove;
+
+    while(*args && *args <= 32)
+        args++;
+
+    if(!strncmp(args, "startpos", 8))
+    {
+        args += 8;
+        board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    }
+    else if (!strncmp(args, "fen", 3))
+    {
+        args += 3;
+        while(*args && *args <= 32)
+            args++;
+
+        args += board_loadfen(&board, args);
+    }
+    else
+    {
+        board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    }
+
+    while(1)
+    {
+        while(*args && *args <= 32)
+            args++;
+
+        if(*args < 'a' || *args > 'h') break;
+        move[0] = *args++;
+        if(*args < '1' || *args > '8') break;
+        move[1] = *args++;
+        if(*args < 'a' || *args > 'h') break;
+        move[1] = *args++;
+        if(*args < '1' || *args > '8') break;
+        move[2] = *args++;
+
+        move_alllegal(&board, &moves, false);
+        if(!(pmove = move_findmove(&moves, move)))
+            continue;
+
+        if((*pmove >> MOVEBITS_TYP_BITS) >= MOVETYPE_PROMQ
+        && (*pmove >> MOVEBITS_TYP_BITS) <= MOVETYPE_PROMN)
+        {
+            *pmove &= ~MOVEBITS_TYP_MASK;
+
+            move[4] = *args++;
+            switch(move[4])
+            {
+            case 'q':
+                *pmove |= ((uint16_t)MOVETYPE_PROMQ) << MOVEBITS_TYP_BITS;
+                break;
+            case 'r':
+                *pmove |= ((uint16_t)MOVETYPE_PROMR) << MOVEBITS_TYP_BITS;
+                break;
+            case 'b':
+                *pmove |= ((uint16_t)MOVETYPE_PROMB) << MOVEBITS_TYP_BITS;
+                break;
+            case 'n':
+                *pmove |= ((uint16_t)MOVETYPE_PROMN) << MOVEBITS_TYP_BITS;
+                break;
+            default:
+                break;
+            }
+        }
+
+        move_domove(&board, *pmove, &mademove);
+    }
+}
+
+void uci_cmd_isready(void)
+{
+    board_findpieces(&board);
+    move_findattacks(&board);
+    move_findpins(&board);
+
+    printf("readyok\n");
+}
+
 void uci_cmd_uci(void)
 {
     printf("id name swall\n");
@@ -24,9 +108,6 @@ void uci_main(void)
     char *c;
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    board_findpieces(&board);
-    move_findattacks(&board);
-    move_findpins(&board);
 
     while(1)
     {
@@ -42,6 +123,13 @@ void uci_main(void)
 
         if(!strncmp(line, "uci", 3))
             uci_cmd_uci();
+        else if(!strncmp(line, "isready", 7))
+            uci_cmd_uci();
+        else if(!strncmp(line, "position", 8))
+            uci_cmd_position(line + 8);
+        else if(!strncmp(line, "d", 1))
+            board_print(&board);
+            
     }
 
     /*
