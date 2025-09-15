@@ -23,7 +23,7 @@ static int tests_movegen_r(board_t* board, int depth)
         return 1;
 
     start = clock();
-    move_alllegal(board, &set);
+    move_alllegal(board, &set, false);
     msmovegen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
     if(depth == 1)

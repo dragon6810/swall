@@ -81,7 +81,7 @@ int main(int argc, char** argv)
             move |= sqrs[0];
             move |= ((uint16_t) sqrs[1]) << MOVEBITS_DST_BITS;
 
-            move_alllegal(&board, &moves);
+            move_alllegal(&board, &moves, false);
             
             if(!(pmove = move_findmove(&moves, move)))
             {
