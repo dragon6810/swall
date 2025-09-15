@@ -47,44 +47,40 @@ int16_t brain_eval(board_t* board)
 
 int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, move_t* outmove)
 {
-    moveset_t *cur;
+    int i;
 
-    moveset_t *moves;
+    moveset_t moves;
     int16_t eval;
     move_t bestmove;
     mademove_t mademove;
 
     if(!depth)
         return brain_eval(board);
-    moves = move_alllegal(board);
 
-    if(!moves)
+    move_alllegal(board, &moves);
+    
+    if(!moves.count)
     {
         if(board->check[board->tomove])
             return INT16_MIN + 1; // checkmate
         return 0; // stalemate
     }
 
-    for(cur=moves; cur; cur=cur->next)
+    for(i=0; i<moves.count; i++)
     {
-        move_domove(board, cur->move, &mademove);
+        move_domove(board, moves.moves[i], &mademove);
         eval = -brain_search(board, -beta, -alpha, depth - 1, NULL);
         move_undomove(board, &mademove);
 
         if(eval >= beta)
-        {
-            move_freeset(moves);
             return beta;
-        }
 
         if(eval > alpha)
         {
             alpha = eval;
-            bestmove = cur->move;
+            bestmove = moves.moves[i];
         }
     }
-
-    move_freeset(moves);
 
     if(outmove)
         *outmove = bestmove;

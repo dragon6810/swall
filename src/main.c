@@ -20,7 +20,7 @@ int main(int argc, char** argv)
     int r, f;
     uint8_t sqrs[2];
     move_t move, *pmove;
-    moveset_t *moves;
+    moveset_t moves;
     mademove_t mademove;
 
     setlocale(LC_ALL, ""); 
@@ -81,13 +81,11 @@ int main(int argc, char** argv)
             move |= sqrs[0];
             move |= ((uint16_t) sqrs[1]) << MOVEBITS_DST_BITS;
 
-            moves = move_alllegal(&board);
+            move_alllegal(&board, &moves);
             
-            if(!(pmove = move_findmove(moves, move)))
+            if(!(pmove = move_findmove(&moves, move)))
             {
                 printf("invalid move.\n");
-                move_freeset(moves);
-                moves = NULL;
                 continue;
             }
 
@@ -113,8 +111,6 @@ int main(int argc, char** argv)
                 else
                 {
                     printf("invalid promotion option.\n");
-                    move_freeset(moves);
-                    moves = NULL;
                     continue;
                 }
             }
@@ -122,9 +118,6 @@ int main(int argc, char** argv)
             move_domove(&board, *pmove, &mademove);
 
             board_print(&board);
-
-            move_freeset(moves);
-            moves = NULL;
 
             brain_dobestmove(&board);
             board_print(&board);

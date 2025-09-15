@@ -8,42 +8,41 @@
 #include "board.h"
 #include "move.h"
 
-double msmovegen = 0, msmove = 0, msundo;
+double msmovegen = 0, msmove = 0, msundo = 0;
 
 static int tests_movegen_r(board_t* board, int depth)
 {
-    moveset_t *cur;
+    int i;
 
-    moveset_t *set;
+    moveset_t set;
     mademove_t mademove;
-    int count;
+    int count, nleaves;
     clock_t start;
 
     if(!depth)
         return 1;
 
     start = clock();
-    set = move_alllegal(board);
+    move_alllegal(board, &set);
     msmovegen += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
-    for(cur=set, count=0; cur; cur=cur->next)
-    {
-        if(depth == 1)
-        {
-            count++;
-            continue;
-        }
+    if(depth == 1)
+        return set.count;
 
+    for(i=count=0; i<set.count; i++)
+    {
         start = clock();
-        move_domove(board, cur->move, &mademove);
+        move_domove(board, set.moves[i], &mademove);
         msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
-        count += tests_movegen_r(board, depth - 1);
+        
+        nleaves = tests_movegen_r(board, depth - 1);
+
         start = clock();
         move_undomove(board, &mademove);
         msundo += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
-    }
 
-    move_freeset(set);
+        count += nleaves;
+    }
 
     return count;
 }

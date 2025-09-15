@@ -34,10 +34,12 @@ typedef enum
 #define MOVEBITS_DST_MASK ((uint16_t)0xFC0)
 #define MOVEBITS_TYP_MASK ((uint16_t)0xF000)
 typedef uint16_t move_t;
+
+#define MAX_MOVE 218
 typedef struct moveset_s
 {
-    move_t move;
-    struct moveset_s *next;
+    uint8_t count;
+    move_t moves[MAX_MOVE];
 } moveset_t;
 
 typedef struct mademove_s
@@ -62,13 +64,12 @@ void move_findattacks(board_t* board);
 // doesn't clear existing pins
 void move_findpins(board_t* board);
 // moves can be NULL
-moveset_t* move_legalmoves(board_t* board, moveset_t* moves, uint8_t src);
+void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src);
 // every legal move for every piece of whoever's turn it is
-moveset_t* move_alllegal(board_t* board);
+void move_alllegal(board_t* board, moveset_t* outmoves);
 // ignores input flags, fills output flags
 move_t* move_findmove(moveset_t* set, move_t move);
 void move_printset(moveset_t* set);
-void move_freeset(moveset_t* set);
 void move_init(void);
 
 #endif
