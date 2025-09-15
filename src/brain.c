@@ -129,19 +129,71 @@ int16_t brain_eval(board_t* board)
                                     : scores[TEAM_BLACK] - scores[TEAM_WHITE];
 }
 
-int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, move_t* outmove)
+static int16_t brain_moveguess(board_t* board, move_t mv)
+{
+    int16_t score;
+
+    bitboard_t srcmask, dstmask;
+    int src, dst, type;
+    piece_e psrc, pdst;
+
+    src = (mv & MOVEBITS_SRC_MASK) >> MOVEBITS_SRC_BITS;
+    dst = (mv & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    type = (mv & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+
+    srcmask = (uint64_t) 1 << src;
+    dstmask = (uint64_t) 1 << dst;
+
+    score = 0;
+    if(type >= MOVETYPE_PROMQ)
+        score += pscore[PIECE_QUEEN + type - MOVETYPE_PROMQ];
+
+    for(psrc=PIECE_KING; psrc<PIECE_COUNT; psrc++)
+        if(board->pboards[board->tomove][psrc] & srcmask)
+            break;
+    
+    if(board->pboards[!board->tomove][PIECE_NONE] & dstmask)
+    {
+        for(pdst=PIECE_KING; pdst<PIECE_COUNT; pdst++)
+            if(board->pboards[!board->tomove][pdst] & dstmask)
+                break;
+
+        score += pscore[pdst] - pscore[psrc];
+    }
+
+    if(board->attacks[!board->tomove] & dstmask)
+        score -= pscore[psrc];
+
+    return score;
+}
+
+static void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MOVE])
 {
     int i;
 
+    for(i=0; i<moves->count; i++)
+        outscores[i] = brain_moveguess(board, moves->moves[i]);
+}
+
+int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, move_t* outmove)
+{
+    int i, j;
+
     moveset_t moves;
+    int16_t scores[MAX_MOVE];
+    int scoreowner;
+    int16_t bestscore;
     int16_t eval;
     move_t bestmove;
     mademove_t mademove;
+    move_t tempmv;
+    int16_t tempscr;
 
     if(!depth)
         return brain_eval(board);
 
     move_alllegal(board, &moves);
+    brain_scoremoves(board, &moves, scores);
 
     if(!moves.count)
     {
@@ -152,6 +204,31 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
 
     for(i=0; i<moves.count; i++)
     {
+        scoreowner = i;
+        bestscore = scores[i];
+
+        for(j=i+1; j<moves.count; j++)
+        {
+            if(scores[j] > bestscore)
+            {
+                bestscore = scores[j];
+                scoreowner = j;
+            }
+        }
+
+        if(scoreowner != i)
+        {
+            tempmv = moves.moves[i];
+            moves.moves[i] = moves.moves[scoreowner];
+            moves.moves[scoreowner] = tempmv;
+
+            tempscr = scores[i];
+            scores[i] = scores[scoreowner];
+            scores[scoreowner] = tempscr;
+        }
+
+        // printf("score %d: %d\n", i, scores[i]);
+
         move_domove(board, moves.moves[i], &mademove);
         eval = -brain_search(board, -beta, -alpha, depth - 1, NULL);
         move_undomove(board, &mademove);
