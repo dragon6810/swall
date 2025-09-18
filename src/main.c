@@ -142,6 +142,13 @@ void uci_cmd_position(const char* args)
     move_findpins(&board);
     board_findcheck(&board);
 
+    while(*args && *args <= 32)
+            args++;
+
+    if(strncmp(args, "moves", 5))
+        return;
+    args += 5;
+
     while(1)
     {
         movew = tryparsemove(args);
@@ -197,7 +204,7 @@ void uci_main(void)
         else if(!strncmp(line, "uci", 3))
             uci_cmd_uci();
         else if(!strncmp(line, "isready", 7))
-            uci_cmd_uci();
+            uci_cmd_isready();
         else if(!strncmp(line, "position", 8))
             uci_cmd_position(line + 8);
         else if(!strncmp(line, "d", 1))

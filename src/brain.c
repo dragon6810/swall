@@ -98,7 +98,7 @@ int16_t brain_kingcornerbonus(board_t* board, team_e team, float endgame)
     float x, y;
     float sqrdst;
 
-    king = board->pboards[team][PIECE_KING];
+    king = board->pboards[!team][PIECE_KING];
     kingsqr = __builtin_ctzll(king);
     f = kingsqr % BOARD_LEN;
     r = kingsqr / BOARD_LEN;
@@ -106,7 +106,7 @@ int16_t brain_kingcornerbonus(board_t* board, team_e team, float endgame)
     y = ((float) r / (float) BOARD_LEN - 0.5) * 2;
 
     sqrdst = x * x + y * y;
-    return sqrdst * 350;
+    return sqrdst * 100;
 }
 
 int16_t brain_eval(board_t* board)
@@ -319,8 +319,6 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
             scores[i] = scores[scoreowner];
             scores[scoreowner] = tempscr;
         }
-
-        // printf("score %d: %d\n", i, scores[i]);
 
         move_domove(board, moves.moves[i], &mademove);
         eval = -brain_search(board, -beta, -alpha, depth - 1, NULL);
