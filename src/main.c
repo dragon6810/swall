@@ -11,12 +11,107 @@
 
 board_t board = {};
 
-void uci_cmd_position(const char* args)
+int tryparsemove(const char* str)
 {
+    int i;
+
+    const char* start;
     char move[5];
-    move_t *pmove;
     moveset_t moves;
     mademove_t mademove;
+    move_t bmove, *pmove;
+
+    start = str;
+
+    while(*str && *str <= 32)
+        str++;
+
+    if(*str < 'a' || *str > 'h') return 0;
+    move[0] = *str++;
+    if(*str < '1' || *str > '8') return 0;
+    move[1] = *str++;
+    if(*str < 'a' || *str > 'h') return 0;
+    move[2] = *str++;
+    if(*str < '1' || *str > '8') return 0;
+    move[3] = *str++;
+
+    move[4] = 0;
+    if(*str == 'q' || *str == 'r' || *str == 'b' || *str == 'n')
+        move[4] = *str++;
+
+    bmove = (move[0] - 'a') + (move[1] - '1') * BOARD_LEN;
+    bmove |= (uint16_t) ((move[2] - 'a') + (move[3] - '1') * BOARD_LEN) << MOVEBITS_DST_BITS;
+
+    move_alllegal(&board, &moves, false);
+    for(i=0, pmove=NULL; i<moves.count; i++)
+    {
+        if((moves.moves[i] & ~MOVEBITS_TYP_MASK) != (bmove & ~MOVEBITS_TYP_MASK))
+            continue;
+
+        if((moves.moves[i] >> MOVEBITS_TYP_BITS) >= MOVETYPE_PROMQ 
+        && (moves.moves[i] >> MOVEBITS_TYP_BITS) <= MOVETYPE_PROMN)
+        {
+            // this is a scummy way to do this
+            if((moves.moves[i] >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMQ && move[4] == 'q');
+            else if((moves.moves[i] >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMR && move[4] == 'r');
+            else if((moves.moves[i] >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMB && move[4] == 'b');
+            else if((moves.moves[i] >> MOVEBITS_TYP_BITS) == MOVETYPE_PROMN && move[4] == 'n');
+            else
+                continue;
+        }
+
+        pmove = &moves.moves[i];
+        break;
+    }
+
+    if(!pmove)
+        return 0;
+
+    move_domove(&board, *pmove, &mademove);
+
+    return str - start;
+}
+
+void uci_cmd_go(const char* args)
+{
+    move_t move;
+    int src, dst;
+    char str[5];
+
+    brain_search(&board, INT16_MIN + 1, INT16_MAX, 4, &move);
+
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+
+    str[0] = 'a' + src % BOARD_LEN;
+    str[1] = '1' + src / BOARD_LEN;
+    str[2] = 'a' + dst % BOARD_LEN;
+    str[3] = '1' + dst / BOARD_LEN;
+
+    switch((move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS)
+    {
+    case MOVETYPE_PROMQ:
+        str[4] = 'q';
+        break;
+    case MOVETYPE_PROMR:
+        str[4] = 'r';
+        break;
+    case MOVETYPE_PROMB:
+        str[4] = 'b';
+        break;
+    case MOVETYPE_PROMN:
+        str[4] = 'n';
+        break;
+    default:
+        str[4] = 0;
+    }
+
+    printf("bestmove %s\n", str);
+}
+
+void uci_cmd_position(const char* args)
+{
+    int res, movew;
 
     while(*args && *args <= 32)
         args++;
@@ -32,57 +127,30 @@ void uci_cmd_position(const char* args)
         while(*args && *args <= 32)
             args++;
 
-        args += board_loadfen(&board, args);
+        res = board_loadfen(&board, args);
+        if(res < 0)
+            return;
+        args += res;
     }
     else
     {
         board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     }
 
+    board_findpieces(&board);
+    move_findattacks(&board);
+    move_findpins(&board);
+    board_findcheck(&board);
+
     while(1)
     {
+        movew = tryparsemove(args);
+        if(!movew)
+            break;
+
+        args += movew;
         while(*args && *args <= 32)
             args++;
-
-        if(*args < 'a' || *args > 'h') break;
-        move[0] = *args++;
-        if(*args < '1' || *args > '8') break;
-        move[1] = *args++;
-        if(*args < 'a' || *args > 'h') break;
-        move[1] = *args++;
-        if(*args < '1' || *args > '8') break;
-        move[2] = *args++;
-
-        move_alllegal(&board, &moves, false);
-        if(!(pmove = move_findmove(&moves, move)))
-            continue;
-
-        if((*pmove >> MOVEBITS_TYP_BITS) >= MOVETYPE_PROMQ
-        && (*pmove >> MOVEBITS_TYP_BITS) <= MOVETYPE_PROMN)
-        {
-            *pmove &= ~MOVEBITS_TYP_MASK;
-
-            move[4] = *args++;
-            switch(move[4])
-            {
-            case 'q':
-                *pmove |= ((uint16_t)MOVETYPE_PROMQ) << MOVEBITS_TYP_BITS;
-                break;
-            case 'r':
-                *pmove |= ((uint16_t)MOVETYPE_PROMR) << MOVEBITS_TYP_BITS;
-                break;
-            case 'b':
-                *pmove |= ((uint16_t)MOVETYPE_PROMB) << MOVEBITS_TYP_BITS;
-                break;
-            case 'n':
-                *pmove |= ((uint16_t)MOVETYPE_PROMN) << MOVEBITS_TYP_BITS;
-                break;
-            default:
-                break;
-            }
-        }
-
-        move_domove(&board, *pmove, &mademove);
     }
 }
 
@@ -108,6 +176,10 @@ void uci_main(void)
     char *c;
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    board_findpieces(&board);
+    move_findattacks(&board);
+    move_findpins(&board);
+    board_findcheck(&board);
 
     while(1)
     {
@@ -121,7 +193,8 @@ void uci_main(void)
         if(c == line)
             continue;
 
-        if(!strncmp(line, "uci", 3))
+        if(tryparsemove(line));
+        else if(!strncmp(line, "uci", 3))
             uci_cmd_uci();
         else if(!strncmp(line, "isready", 7))
             uci_cmd_uci();
@@ -129,105 +202,9 @@ void uci_main(void)
             uci_cmd_position(line + 8);
         else if(!strncmp(line, "d", 1))
             board_print(&board);
-            
+        else if(!strncmp(line, "go", 2))
+            uci_cmd_go(line + 2);
     }
-
-    /*
-    board_print(&board);
-
-    while(1)
-    {
-        fgets(buf, MAX_INPUT, stdin);
-        buf[strlen(buf) - 1] = 0; // chop off \n
-
-        if(!strcmp(buf, "help"))
-        {
-            printf("commands:\n");
-
-            printf("    help\n");
-            printf("        prints this message.\n");
-
-            printf("    move <src> <dst>\n");
-            printf("        move a piece from source square to dest square, if legal.\n");
-            printf("        src and dst are expected to be in algebraic notation.\n");
-
-            continue;
-        }
-
-        if(sscanf(buf, " move %2s %2s", movestr[0], movestr[1]) == 2)
-        {
-            for(i=0; i<2; i++)
-            {
-                if(movestr[i][0] < 'a' || movestr[i][0] > 'h')
-                    break;
-                if(movestr[i][1] < '1' || movestr[i][1] > '8')
-                    break;
-            }
-            if(i < 2)
-            {
-                printf("invalid coordinates.\n");
-                continue;
-            }
-
-            for(i=0; i<2; i++)
-            {
-                r = movestr[i][1] - '1';
-                f = movestr[i][0] - 'a';
-                sqrs[i] = r * BOARD_LEN + f;
-            }
-
-            move = 0;
-            move |= sqrs[0];
-            move |= ((uint16_t) sqrs[1]) << MOVEBITS_DST_BITS;
-
-            move_alllegal(&board, &moves, false);
-            
-            if(!(pmove = move_findmove(&moves, move)))
-            {
-                printf("invalid move.\n");
-                continue;
-            }
-
-            if((*pmove >> MOVEBITS_TYP_BITS) >= MOVETYPE_PROMQ
-            && (*pmove >> MOVEBITS_TYP_BITS) <= MOVETYPE_PROMN)
-            {
-                *pmove &= ~MOVEBITS_TYP_MASK;
-
-                printf("what piece would you like to promote to?\n");
-                printf("type \"queen\", \"rook\", \"bishop\", or \"knight\".\n");
-
-                fgets(buf, MAX_INPUT, stdin);
-                buf[strlen(buf) - 1] = 0; // chop off \n
-                
-                if(!strcmp(buf, "queen"))
-                    *pmove |= ((uint16_t)MOVETYPE_PROMQ) << MOVEBITS_TYP_BITS;
-                else if(!strcmp(buf, "rook"))
-                    *pmove |= ((uint16_t)MOVETYPE_PROMR) << MOVEBITS_TYP_BITS;
-                else if(!strcmp(buf, "bishop"))
-                    *pmove |= ((uint16_t)MOVETYPE_PROMB) << MOVEBITS_TYP_BITS;
-                else if(!strcmp(buf, "knight"))
-                    *pmove |= ((uint16_t)MOVETYPE_PROMN) << MOVEBITS_TYP_BITS;
-                else
-                {
-                    printf("invalid promotion option.\n");
-                    continue;
-                }
-            }
-
-            move_domove(&board, *pmove, &mademove);
-
-            board_print(&board);
-
-            brain_dobestmove(&board);
-            board_print(&board);
-
-            continue;
-        }
-
-        if(buf[0])
-            printf("no matching command.\n");
-    }
-    */
 }
 
 int main(int argc, char** argv)

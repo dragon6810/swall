@@ -334,13 +334,19 @@ int board_loadfen(board_t* board, const char* fen)
     if(*c++ != ' ')
         goto badfen;
 
-    // TODO: halfmove and fullmove
+    while(*c >= '0' && *c <= '9')
+        c++;
+
+    if(*c++ != ' ')
+        goto badfen;
+
+    while(*c >= '0' && *c <= '9')
+        c++;
 
     return c - fen;
 
 badfen:
     printf("bad fen \"%s\".\n", fen);
-    exit(1);
 
-    return c - fen;
+    return -1;
 }
