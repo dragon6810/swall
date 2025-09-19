@@ -106,7 +106,7 @@ int16_t brain_kingcornerbonus(board_t* board, team_e team, float endgame)
     y = ((float) r / (float) BOARD_LEN - 0.5) * 2;
 
     sqrdst = x * x + y * y;
-    return sqrdst * 100;
+    return sqrdst * 100 * endgame;
 }
 
 int16_t brain_eval(board_t* board)
@@ -128,7 +128,7 @@ int16_t brain_eval(board_t* board)
 
     for(t=0; t<TEAM_COUNT; t++)
     {
-        material[t] = 0;
+        scores[t] = material[t] = 0;
 
         for(i=0; i<board->npiece[t]; i++)
         {
@@ -138,7 +138,7 @@ int16_t brain_eval(board_t* board)
                 if(!(board->pboards[t][p] & pmask))
                     continue;
 
-                scores[t] += pscore[p];
+                material[t] += pscore[p];
                 break;
             }
 
@@ -147,12 +147,12 @@ int16_t brain_eval(board_t* board)
             if(t == TEAM_BLACK)
                 r = BOARD_LEN - 1 - r;
 
-            material[t] += psqrttable[p][r * BOARD_LEN + f] * 2;
+            scores[t] += psqrttable[p][r * BOARD_LEN + f] * 2;
         }
 
         endgameweight = 1 - ((float) material[t] / (float) startmaterial);
 
-        scores[t] = material[t];
+        scores[t] += material[t];
         scores[t] += brain_kingcornerbonus(board, t, endgameweight);
     }
 
@@ -254,9 +254,9 @@ static int16_t brain_searchcap(board_t* board, int16_t alpha, int16_t beta)
             scores[scoreowner] = tempscr;
         }
 
-        move_domove(board, moves.moves[i], &mademove);
+        move_make(board, moves.moves[i], &mademove);
         eval = -brain_searchcap(board, -beta, -alpha);
-        move_undomove(board, &mademove);
+        move_unmake(board, &mademove);
 
         if(eval >= beta)
             return beta;
@@ -285,6 +285,7 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
     if(!depth)
         return brain_searchcap(board, alpha, beta);
 
+    bestmove = 0;
     move_alllegal(board, &moves, false);
     brain_scoremoves(board, &moves, scores);
 
@@ -320,9 +321,9 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
             scores[scoreowner] = tempscr;
         }
 
-        move_domove(board, moves.moves[i], &mademove);
+        move_make(board, moves.moves[i], &mademove);
         eval = -brain_search(board, -beta, -alpha, depth - 1, NULL);
-        move_undomove(board, &mademove);
+        move_unmake(board, &mademove);
 
         if(eval >= beta)
             return beta;
@@ -345,5 +346,5 @@ void brain_dobestmove(board_t* board)
     mademove_t mademove;
 
     brain_search(board, INT16_MIN + 1, INT16_MAX, 4, &move);
-    move_domove(board, move, &mademove);
+    move_make(board, move, &mademove);
 }

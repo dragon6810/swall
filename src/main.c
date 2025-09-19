@@ -67,7 +67,7 @@ int tryparsemove(const char* str)
     if(!pmove)
         return 0;
 
-    move_domove(&board, *pmove, &mademove);
+    move_make(&board, *pmove, &mademove);
 
     return str - start;
 }
@@ -78,7 +78,7 @@ void uci_cmd_go(const char* args)
     int src, dst;
     char str[5];
 
-    brain_search(&board, INT16_MIN + 1, INT16_MAX, 4, &move);
+    brain_search(&board, INT16_MIN + 1, INT16_MAX, 5, &move);
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;

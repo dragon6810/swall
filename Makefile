@@ -1,6 +1,6 @@
 CC = clang
 LDFLAGS = -fsanitize=address -g
-CFLAGS = -Wall -Werror -fsanitize=address -g -O3
+CFLAGS = -MMD -Wall -Werror -fsanitize=address -g -O3
 
 BIN_DIR = bin
 OBJ_DIR = obj
@@ -8,6 +8,7 @@ SRC_DIR = src
 
 SRC_FILE = $(wildcard $(SRC_DIR)/*.c)
 OBJ_FILE = $(addprefix $(OBJ_DIR)/, $(addsuffix .o, $(SRC_FILE)))
+DEP_FILE = $(OBJ_FILE:.o=.d)
 BIN_FILE = $(BIN_DIR)/swall
 
 .PHONY: all clean mkdirs
@@ -28,3 +29,5 @@ $(BIN_FILE): $(OBJ_FILE)
 
 $(OBJ_DIR)/$(SRC_DIR)/%.c.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+-include $(DEP_FILE)

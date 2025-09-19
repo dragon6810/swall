@@ -32,13 +32,13 @@ static int tests_movegen_r(board_t* board, int depth)
     for(i=count=0; i<set.count; i++)
     {
         start = clock();
-        move_domove(board, set.moves[i], &mademove);
+        move_make(board, set.moves[i], &mademove);
         msmove += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
         
         nleaves = tests_movegen_r(board, depth - 1);
 
         start = clock();
-        move_undomove(board, &mademove);
+        move_unmake(board, &mademove);
         msundo += (double) (clock() - start) / CLOCKS_PER_SEC * 1000.0;
 
         count += nleaves;

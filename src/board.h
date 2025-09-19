@@ -53,13 +53,19 @@ typedef struct pinline_s
     bitboard_t bits;
 } pinline_t;
 
+#define SQUARE_BITS_TEAM 3 
+#define SQUARE_MASK_TEAM (1 << PIECE_MASK_BITS)
+#define SQUARE_MASK_TYPE 0x7
+
+typedef uint8_t square_t;
 typedef struct board_s
 {
     // pboards[team][PIECE_NONE] is a bitwise or of all pieces for that team
     bitboard_t pboards[TEAM_COUNT][PIECE_COUNT];
-
     uint8_t npiece[TEAM_COUNT];
     uint8_t ptable[TEAM_COUNT][PIECE_MAX];
+    square_t sqrs[BOARD_AREA];
+
     bitboard_t attacks[TEAM_COUNT];
     uint8_t npins[TEAM_COUNT];
     pinline_t pins[TEAM_COUNT][PIECE_MAX*8];
