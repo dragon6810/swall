@@ -56,6 +56,7 @@ typedef struct pinline_s
 #define SQUARE_BITS_TEAM 3 
 #define SQUARE_MASK_TEAM (1 << PIECE_MASK_BITS)
 #define SQUARE_MASK_TYPE 0x7
+#define SQUARE_EMPTY 0
 
 typedef uint8_t square_t;
 typedef struct board_s

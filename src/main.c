@@ -200,7 +200,8 @@ void uci_main(void)
         if(c == line)
             continue;
 
-        if(tryparsemove(line));
+        if(tryparsemove(line))
+            continue;
         else if(!strncmp(line, "uci", 3))
             uci_cmd_uci();
         else if(!strncmp(line, "isready", 7))
@@ -220,7 +221,7 @@ int main(int argc, char** argv)
     setvbuf(stdout, NULL, _IONBF, 0);
 
     move_init();
-    tests_movegen();
+    //tests_movegen();
 
     uci_main();
     

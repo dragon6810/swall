@@ -48,7 +48,8 @@ void board_findcheck(board_t* board)
 #ifdef PRINTUNICODE
 wint_t piecechars[TEAM_COUNT][PIECE_COUNT] = 
 {
-    { 
+    {
+        ' ',
         0x2654,
         0x2655,
         0x2656,
@@ -57,6 +58,7 @@ wint_t piecechars[TEAM_COUNT][PIECE_COUNT] =
         0x2659,
     },
     { 
+        ' ',
         0x265A,
         0x265B,
         0x265C,
@@ -69,6 +71,7 @@ wint_t piecechars[TEAM_COUNT][PIECE_COUNT] =
 char piecechars[TEAM_COUNT][PIECE_COUNT] = 
 {
     { 
+        ' ',
         'K',
         'Q',
         'R',
@@ -77,6 +80,7 @@ char piecechars[TEAM_COUNT][PIECE_COUNT] =
         'P',
     },
     { 
+        ' ',
         'k',
         'q',
         'r',
@@ -112,27 +116,14 @@ void board_print(const board_t* board)
         {
             i = r * BOARD_LEN + f;
 
-            for(t=0; t<TEAM_COUNT; t++)
-            {
-                for(p=PIECE_KING; p<PIECE_COUNT; p++)
-                {
-                    if(!((uint64_t) 1 << i & board->pboards[t][p]))
-                        continue;
+            t = board->sqrs[i] >> SQUARE_BITS_TEAM;
+            p = board->sqrs[i] & SQUARE_MASK_TYPE;
 
 #ifdef PRINTUNICODE
-                    wprintf(L"| %lc ", piecechars[t][p-1]);
+            wprintf(L"| %lc ", piecechars[t][p]);
 #else
-                    printf("| %c ", piecechars[t][p-1]);
+            printf("| %c ", piecechars[t][p]);
 #endif
-
-                    break;
-                }
-                if(p < PIECE_COUNT)
-                    break;
-            }
-
-            if(t >= TEAM_COUNT)
-                printf("|   ");
         }
 
         printf("|\n  ");
@@ -219,26 +210,32 @@ int board_loadfen(board_t* board, const char* fen)
             switch(pc)
             {
             case 'K':
+                board->sqrs[i] = black << SQUARE_BITS_TEAM | PIECE_KING;
                 board->pboards[black][PIECE_KING] |= (uint64_t) 1 << i;
                 board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'Q':
+                board->sqrs[i] = black << SQUARE_BITS_TEAM | PIECE_QUEEN;
                 board->pboards[black][PIECE_QUEEN] |= (uint64_t) 1 << i;
                 board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'R':
+                board->sqrs[i] = black << SQUARE_BITS_TEAM | PIECE_ROOK;
                 board->pboards[black][PIECE_ROOK] |= (uint64_t) 1 << i;
                 board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'B':
+                board->sqrs[i] = black << SQUARE_BITS_TEAM | PIECE_BISHOP;
                 board->pboards[black][PIECE_BISHOP] |= (uint64_t) 1 << i;
                 board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'N':
+                board->sqrs[i] = black << SQUARE_BITS_TEAM | PIECE_KNIGHT;
                 board->pboards[black][PIECE_KNIGHT] |= (uint64_t) 1 << i;
                 board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
             case 'P':
+                board->sqrs[i] = black << SQUARE_BITS_TEAM | PIECE_PAWN;
                 board->pboards[black][PIECE_PAWN] |= (uint64_t) 1 << i;
                 board->pboards[black][PIECE_NONE] |= (uint64_t) 1 << i;
                 break;
