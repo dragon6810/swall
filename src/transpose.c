@@ -1,0 +1,53 @@
+#include "transpose.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+void transpose_alloc(ttable_t* table, uint64_t sizekb)
+{
+    uint64_t nel;
+
+    nel = sizekb * 1024 / sizeof(transpos_t);
+    table->size = nel;
+    table->data = malloc(nel * sizeof(transpos_t));
+    memset(table->data, 0, nel * sizeof(transpos_t));
+}
+
+void transpose_free(ttable_t* table)
+{
+    free(table->data);
+
+    table->size = 0;
+    table->data = NULL;
+}
+
+void transpose_clear(ttable_t* table)
+{
+    memset(table->data, 0, table->size * sizeof(transpos_t));
+}
+
+transpos_t* transpose_find(ttable_t* table, uint64_t hash)
+{
+    uint64_t idx;
+
+    if(!hash)
+        return NULL;
+
+    idx = hash % table->size;
+    if(table->data[idx].hash != hash)
+        return NULL;
+
+    return &table->data[idx];
+}
+
+void transpose_store(ttable_t* table, uint64_t hash, int16_t eval)
+{
+    uint64_t idx;
+
+    if(!hash)
+        return;
+
+    idx = hash % table->size;
+    table->data[idx].hash = hash;
+    table->data[idx].eval = eval;
+}

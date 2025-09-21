@@ -8,7 +8,7 @@
 #include "tests.h"
 #include "zobrist.h"
 
-#define MAX_INPUT 512
+#define MAX_INPUT 4096
 
 board_t board = {};
 
@@ -77,9 +77,9 @@ void uci_cmd_go(const char* args)
 {
     move_t move;
     int src, dst;
-    char str[5];
+    char str[6];
 
-    brain_search(&board, INT16_MIN + 1, INT16_MAX, 5, &move);
+    move = brain_runsearch(&board, 250);
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -106,6 +106,8 @@ void uci_cmd_go(const char* args)
     default:
         str[4] = 0;
     }
+
+    str[5] = 0;
 
     printf("bestmove %s\n", str);
 }
@@ -143,6 +145,9 @@ void uci_cmd_position(const char* args)
     move_findpins(&board);
     board_findcheck(&board);
 
+    transpose_alloc(&board.ttable, 64 * 1024);
+    transpose_alloc(&board.ttableold, 64 * 1024);
+
     while(*args && *args <= 32)
             args++;
 
@@ -160,8 +165,6 @@ void uci_cmd_position(const char* args)
         while(*args && *args <= 32)
             args++;
     }
-
-    printf("zobrist: %16llx\n", zobrist_hash(&board));
 }
 
 void uci_cmd_isready(void)
@@ -190,6 +193,8 @@ void uci_main(void)
     move_findattacks(&board);
     move_findpins(&board);
     board_findcheck(&board);
+    transpose_alloc(&board.ttable, 64 * 1024);
+    transpose_alloc(&board.ttableold, 64 * 1024);
     zobrist_init();
 
     while(1)
@@ -216,7 +221,11 @@ void uci_main(void)
             board_print(&board);
         else if(!strncmp(line, "go", 2))
             uci_cmd_go(line + 2);
+        else if(!strncmp(line, "quit", 4))
+            break;
     }
+
+    transpose_free(&board.ttable);
 }
 
 int main(int argc, char** argv)

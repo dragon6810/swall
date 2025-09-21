@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
+#include <time.h>
+
+#include "zobrist.h"
 
 int16_t pscore[PIECE_COUNT] =
 {
@@ -120,10 +123,17 @@ int16_t brain_eval(board_t* board)
     int i;
     team_e t;
 
-    int16_t material[TEAM_COUNT], scores[TEAM_COUNT];
+    uint64_t hash;
+    transpos_t *transpos;
+    int16_t material[TEAM_COUNT], scores[TEAM_COUNT], eval;
     int r, f;
     piece_e p;
     float endgameweight;
+
+    hash = zobrist_hash(board);
+    transpos = transpose_find(&board->ttable, hash);
+    if(transpos)
+        return transpos->eval;
 
     for(t=0; t<TEAM_COUNT; t++)
     {
@@ -148,9 +158,11 @@ int16_t brain_eval(board_t* board)
         scores[t] += brain_kingcornerbonus(board, t, endgameweight);
     }
 
-    return 
-        board->tomove == TEAM_WHITE ? scores[TEAM_WHITE] - scores[TEAM_BLACK] 
-                                    : scores[TEAM_BLACK] - scores[TEAM_WHITE];
+    eval = board->tomove == TEAM_WHITE ? scores[TEAM_WHITE] - scores[TEAM_BLACK] : scores[TEAM_BLACK] - scores[TEAM_WHITE];
+    
+    transpose_store(&board->ttable, hash, eval);
+    transpose_store(&board->ttableold, hash, eval);
+    return eval;
 }
 
 int16_t brain_moveguess(board_t* board, move_t mv)
@@ -322,6 +334,27 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
     if(outmove)
         *outmove = bestmove;
     return alpha;
+}
+
+move_t brain_runsearch(board_t* board, int timems)
+{
+    int i;
+
+    clock_t start;
+    move_t move;
+
+    start = clock();
+
+    transpose_clear(&board->ttable);
+    for(i=1;; i++)
+    {
+        if(i > 1 && (double) (clock() - start) / CLOCKS_PER_SEC * 1000 >= timems)
+            break;
+
+        brain_search(board, INT16_MIN + 1, INT16_MAX, i, &move);
+    }
+
+    return move;
 }
 
 void brain_dobestmove(board_t* board)
