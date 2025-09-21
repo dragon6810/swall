@@ -6,9 +6,6 @@
 #include "board.h"
 #include "move.h"
 
-// positive in favor of board->tomove
-int16_t brain_eval(board_t* board);
-int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, move_t* outmove);
 move_t brain_runsearch(board_t* board, int timems);
 
 #endif
