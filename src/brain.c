@@ -163,6 +163,11 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     bitboard_t dstmask;
     int src, dst, type;
     piece_e psrc, pdst;
+    //transpos_t *transpos;
+
+    //transpos = transpose_find(&board->ttableold, board->hash, 255);
+    //if(transpos && transpos->bestmove == mv)
+    //    return 9950; // a little less than mate
 
     src = (mv & MOVEBITS_SRC_MASK) >> MOVEBITS_SRC_BITS;
     dst = (mv & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -285,7 +290,6 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
 {
     int i;
 
-    uint64_t hash;
     transpos_t *transpos;
     moveset_t moves;
     int16_t scores[MAX_MOVE];
@@ -303,8 +307,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     if(board->stalemate)
         return 0;
 
-    hash = zobrist_hash(board);
-    transpos = transpose_find(&board->ttable, hash, depth);
+    transpos = transpose_find(&board->ttable, board->hash, depth);
     if(transpos)
     {
         ntranspos++;
@@ -324,7 +327,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         if(board->check[board->tomove])
             eval = -10000 + rootdepth; // checkmate
 
-        transpose_store(&board->ttable, hash, depth, eval);
+        transpose_store(&board->ttable, board->hash, depth, eval, 0);
         return eval;
     }
 
@@ -350,7 +353,8 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     if(outmove)
         *outmove = alphamove;
 
-    transpose_store(&board->ttable, hash, depth, alpha);
+    transpose_store(&board->ttable, board->hash, depth, alpha, alphamove);
+    transpose_store(&board->ttableold, board->hash, depth, alpha, alphamove);
     return alpha;
 }
 

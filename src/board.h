@@ -70,6 +70,8 @@ typedef struct board_s
     uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     square_t sqrs[BOARD_AREA];
 
+    uint64_t hash;
+
     zobristdict_t threefold;
     bool stalemate;
 

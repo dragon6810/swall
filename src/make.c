@@ -7,14 +7,11 @@
 
 void move_addtothreefold(board_t* board, int add)
 {
-    uint64_t hash;
     int16_t *pval;
 
     board->stalemate = false;
 
-    hash = zobrist_hash(board);
-
-    pval = zobrist_find(&board->threefold, hash);
+    pval = zobrist_find(&board->threefold, board->hash);
     if(pval)
     {
         *pval += add;
@@ -22,7 +19,7 @@ void move_addtothreefold(board_t* board, int add)
         return;
     }
 
-    zobrist_set(&board->threefold, hash, add);
+    zobrist_set(&board->threefold, board->hash, add);
 }
 
 void move_make(board_t* board, move_t move, mademove_t* outmove)
@@ -170,6 +167,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
         exit(1);
     }
 
+    board->hash = zobrist_hash(board);
     move_addtothreefold(board, 1);
 }
 
@@ -272,4 +270,6 @@ void move_unmake(board_t* board, const mademove_t* move)
     memcpy(board->npins, move->npins, sizeof(board->npins));
     memcpy(board->pins, move->pins, sizeof(board->pins));
     memcpy(board->check, move->check, sizeof(board->check));
+
+    board->hash = zobrist_hash(board);
 }

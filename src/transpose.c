@@ -36,13 +36,13 @@ transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth)
     idx = hash % table->size;
     if(table->data[idx].hash != hash)
         return NULL;
-    if(table->data[idx].depth < depth)
+    if(depth != 255 && table->data[idx].depth < depth)
         return NULL;
 
     return &table->data[idx];
 }
 
-void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval)
+void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval, move_t move)
 {
     uint64_t idx;
 
@@ -53,4 +53,6 @@ void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval
     table->data[idx].hash = hash;
     table->data[idx].depth = depth;
     table->data[idx].eval = eval;
+    table->data[idx].bestmove = move;
 }
+
