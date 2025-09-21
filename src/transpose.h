@@ -6,6 +6,7 @@
 typedef struct transpos_s
 {
     uint64_t hash; // 0 is special null value, zero hashes might not work
+    uint8_t depth; // how many plys to leaves? 0 for leaves.
     int16_t eval;
 } transpos_t;
 
@@ -18,7 +19,7 @@ typedef struct ttable_s
 void transpose_alloc(ttable_t* table, uint64_t sizekb);
 void transpose_free(ttable_t* table);
 void transpose_clear(ttable_t* table);
-transpos_t* transpose_find(ttable_t* table, uint64_t hash);
-void transpose_store(ttable_t* table, uint64_t hash, int16_t eval);
+transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth);
+void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval);
 
 #endif

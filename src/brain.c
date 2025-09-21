@@ -123,17 +123,10 @@ int16_t brain_eval(board_t* board)
     int i;
     team_e t;
 
-    uint64_t hash;
-    transpos_t *transpos;
     int16_t material[TEAM_COUNT], scores[TEAM_COUNT], eval;
     int r, f;
     piece_e p;
     float endgameweight;
-
-    hash = zobrist_hash(board);
-    transpos = transpose_find(&board->ttable, hash);
-    if(transpos)
-        return transpos->eval;
 
     for(t=0; t<TEAM_COUNT; t++)
     {
@@ -159,9 +152,6 @@ int16_t brain_eval(board_t* board)
     }
 
     eval = board->tomove == TEAM_WHITE ? scores[TEAM_WHITE] - scores[TEAM_BLACK] : scores[TEAM_BLACK] - scores[TEAM_WHITE];
-    
-    transpose_store(&board->ttable, hash, eval);
-    transpose_store(&board->ttableold, hash, eval);
     return eval;
 }
 
@@ -203,6 +193,11 @@ void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MO
         outscores[i] = brain_moveguess(board, moves->moves[i]);
 }
 
+int ntranspos = 0;
+clock_t searchstart;
+bool searchcanceled;
+int searchtime;
+
 static int16_t brain_searchcap(board_t* board, int16_t alpha, int16_t beta)
 {
     int i, j;
@@ -215,6 +210,22 @@ static int16_t brain_searchcap(board_t* board, int16_t alpha, int16_t beta)
     mademove_t mademove;
     move_t tempmv;
     int16_t tempscr;
+    uint64_t hash;
+    transpos_t *transpos;
+
+    if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
+    {
+        searchcanceled = true;
+        return 0;
+    }
+
+    hash = zobrist_hash(board);
+    transpos = transpose_find(&board->ttable, hash, 0);
+    if(transpos)
+    {
+        ntranspos++;
+        return transpos->eval;
+    }
 
     eval = brain_eval(board);
     if(eval >= beta)
@@ -254,6 +265,9 @@ static int16_t brain_searchcap(board_t* board, int16_t alpha, int16_t beta)
         eval = -brain_searchcap(board, -beta, -alpha);
         move_unmake(board, &mademove);
 
+        if(searchcanceled)
+            return 0;
+
         if(eval >= beta)
             return beta;
 
@@ -261,9 +275,12 @@ static int16_t brain_searchcap(board_t* board, int16_t alpha, int16_t beta)
             alpha = eval;
     }
 
+    transpose_store(&board->ttable, hash, 0, alpha);
+
     return alpha;
 }
 
+// if search is canceled, dont trust the results!
 int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, move_t* outmove)
 {
     int i, j;
@@ -277,6 +294,22 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
     mademove_t mademove;
     move_t tempmv;
     int16_t tempscr;
+    uint64_t hash;
+    transpos_t *transpos;
+
+    if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
+    {
+        searchcanceled = true;
+        return 0;
+    }
+
+    hash = zobrist_hash(board);
+    transpos = transpose_find(&board->ttable, hash, depth);
+    if(transpos)
+    {
+        ntranspos++;
+        return transpos->eval;
+    }
 
     if(!depth)
         return brain_searchcap(board, alpha, beta);
@@ -287,9 +320,12 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
 
     if(!moves.count)
     {
+        eval = 0; // stalemate
         if(board->check[board->tomove])
-            return INT16_MIN + 1; // checkmate
-        return 0; // stalemate
+            eval = INT16_MIN + 1; // checkmate
+
+        transpose_store(&board->ttable, hash, depth, eval);
+        return eval;
     }
 
     for(i=0; i<moves.count; i++)
@@ -321,18 +357,25 @@ int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, mov
         eval = -brain_search(board, -beta, -alpha, depth - 1, NULL);
         move_unmake(board, &mademove);
 
-        if(eval >= beta)
-            return beta;
+        if(searchcanceled)
+            return 0;
 
         if(eval > alpha)
         {
             alpha = eval;
             bestmove = moves.moves[i];
         }
+
+        // the eval we return as a maximizer will be >= to the minimizer's best move, 
+        // so we can exit since the minimizer won't take this path.
+        if(alpha >= beta)
+            return beta;
     }
 
     if(outmove)
         *outmove = bestmove;
+
+    transpose_store(&board->ttable, hash, depth, alpha);
     return alpha;
 }
 
@@ -340,28 +383,24 @@ move_t brain_runsearch(board_t* board, int timems)
 {
     int i;
 
-    clock_t start;
-    move_t move;
+    move_t move, safemove;
 
-    start = clock();
+    ntranspos = 0;
+    searchstart = clock();
+    searchtime = timems;
+    searchcanceled = false;
 
-    transpose_clear(&board->ttable);
-    for(i=1;; i++)
+    for(i=1, safemove=0;; i++)
     {
-        if(i > 1 && (double) (clock() - start) / CLOCKS_PER_SEC * 1000 >= timems)
-            break;
-
         brain_search(board, INT16_MIN + 1, INT16_MAX, i, &move);
+        
+        if(!searchcanceled)
+            safemove = move;
+        else
+            break;
     }
 
-    return move;
-}
+    printf("searched to depth %d with %d transpositions\n", i - 1, ntranspos);
 
-void brain_dobestmove(board_t* board)
-{
-    move_t move;
-    mademove_t mademove;
-
-    brain_search(board, INT16_MIN + 1, INT16_MAX, 4, &move);
-    move_make(board, move, &mademove);
+    return safemove;
 }
