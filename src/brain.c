@@ -240,8 +240,8 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
 {
     int i;
 
-    // uint64_t hash;
-    // transpos_t *transpos;
+    uint64_t hash;
+    transpos_t *transpos;
     moveset_t moves;
     int16_t scores[MAX_MOVE];
     int16_t eval;
@@ -254,14 +254,13 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         return 0;
     }
 
-    // hash = zobrist_hash(board);
-    // transpos = transpose_find(&board->ttable, hash, depth);
-    // transpos = NULL;
-    // if(transpos)
-    // {
-    //     ntranspos++;
-    //     return transpos->eval;
-    // }
+    hash = zobrist_hash(board);
+    transpos = transpose_find(&board->ttable, hash, depth);
+    if(transpos)
+    {
+        ntranspos++;
+        return transpos->eval;
+    }
 
     if(!depth)
         return brain_eval(board);
@@ -276,7 +275,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         if(board->check[board->tomove])
             eval = -10000 + rootdepth; // checkmate
 
-        // transpose_store(&board->ttable, hash, depth, eval);
+        transpose_store(&board->ttable, hash, depth, eval);
         return eval;
     }
 
@@ -302,7 +301,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     if(outmove)
         *outmove = alphamove;
 
-    // transpose_store(&board->ttable, hash, depth, alpha);
+    transpose_store(&board->ttable, hash, depth, alpha);
     return alpha;
 }
 
@@ -319,7 +318,8 @@ move_t brain_runsearch(board_t* board, int timems)
     searchcanceled = false;
 
     for(i=1, safemove=0;; i++)
-    {   
+    {
+        transpose_clear(&board->ttable);
         eval = brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, &move);
 
         if(searchcanceled)
