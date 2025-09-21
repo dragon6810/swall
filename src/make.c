@@ -102,40 +102,33 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
         newtype = ptype;
     }
 
+    captype = board->sqrs[dst] & SQUARE_MASK_TYPE;
+
+    if(captype)
+    {
+        board->pboards[!team][captype] ^= dstmask;
+        board->pboards[!team][PIECE_NONE] ^= dstmask;
+        outmove->captured = captype;
+        
+        if(captype == PIECE_ROOK)
+        {
+            if((team == TEAM_BLACK && dst / BOARD_LEN == 0)
+            || (team == TEAM_WHITE && dst / BOARD_LEN == BOARD_LEN - 1))
+            {
+                if(dst % BOARD_LEN == BOARD_LEN - 1)
+                    board->kcastle[!team] = false;
+                else if(!(dst % BOARD_LEN))
+                    board->qcastle[!team] = false;
+            }
+        }
+    }
+
     board->sqrs[dst] = team << SQUARE_BITS_TEAM | newtype;
     board->sqrs[src] = SQUARE_EMPTY;
     board->pboards[team][ptype] ^= srcmask;
     board->pboards[team][PIECE_NONE] ^= srcmask;
     board->pboards[team][newtype] |= dstmask;
     board->pboards[team][PIECE_NONE] |= dstmask;
-
-    if(board->pboards[!team][PIECE_NONE] & dstmask)
-    {
-        // we can never capture the king, so start at queen instead
-        for(captype=PIECE_QUEEN; captype<PIECE_COUNT; captype++)
-        {
-            if(!(board->pboards[!team][captype] & dstmask))
-                continue;
-
-            board->pboards[!team][captype] ^= dstmask;
-            board->pboards[!team][PIECE_NONE] ^= dstmask;
-            outmove->captured = captype;
-            
-            if(captype == PIECE_ROOK)
-            {
-                if((team == TEAM_BLACK && dst / BOARD_LEN == 0)
-                || (team == TEAM_WHITE && dst / BOARD_LEN == BOARD_LEN - 1))
-                {
-                    if(dst % BOARD_LEN == BOARD_LEN - 1)
-                        board->kcastle[!team] = false;
-                    else if(!(dst % BOARD_LEN))
-                        board->qcastle[!team] = false;
-                }
-            }
-
-            break;
-        }
-    }
 
     board->tomove = !board->tomove;
     

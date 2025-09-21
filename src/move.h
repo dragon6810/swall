@@ -20,11 +20,11 @@ typedef enum
 {
     MOVETYPE_DEFAULT=0, // just moving a piece
     MOVETYPE_CASTLE,    // castle your king
+    MOVETYPE_ENPAS,     // en passant
     MOVETYPE_PROMQ,     // promote a pawn to a queen
     MOVETYPE_PROMR,     // promote a pawn to a rook
     MOVETYPE_PROMB,     // promote a pawn to a bishop
     MOVETYPE_PROMN,     // promote a pawn to a knight
-    MOVETYPE_ENPAS,     // en passant
 } movetype_e;
 // TTTTDDDDDDSSSSSS
 #define MOVEBITS_SRC_BITS ((uint16_t)0)

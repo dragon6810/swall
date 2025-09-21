@@ -119,11 +119,10 @@ int16_t brain_eval(board_t* board)
 
     int i;
     team_e t;
-    piece_e p;
 
-    bitboard_t pmask;
     int16_t material[TEAM_COUNT], scores[TEAM_COUNT];
     int r, f;
+    piece_e p;
     float endgameweight;
 
     for(t=0; t<TEAM_COUNT; t++)
@@ -132,15 +131,8 @@ int16_t brain_eval(board_t* board)
 
         for(i=0; i<board->npiece[t]; i++)
         {
-            pmask = (uint64_t) 1 << board->ptable[t][i];
-            for(p=PIECE_KING; p<PIECE_COUNT; p++)
-            {
-                if(!(board->pboards[t][p] & pmask))
-                    continue;
-
-                material[t] += pscore[p];
-                break;
-            }
+            p = board->sqrs[board->ptable[t][i]] & SQUARE_MASK_TYPE;
+            material[t] += pscore[p];
 
             r = board->ptable[t][i] / BOARD_LEN;
             f = board->ptable[t][i] % BOARD_LEN;
@@ -161,11 +153,11 @@ int16_t brain_eval(board_t* board)
                                     : scores[TEAM_BLACK] - scores[TEAM_WHITE];
 }
 
-static int16_t brain_moveguess(board_t* board, move_t mv)
+int16_t brain_moveguess(board_t* board, move_t mv)
 {
     int16_t score;
 
-    bitboard_t srcmask, dstmask;
+    bitboard_t dstmask;
     int src, dst, type;
     piece_e psrc, pdst;
 
@@ -173,25 +165,17 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     dst = (mv & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     type = (mv & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
 
-    srcmask = (uint64_t) 1 << src;
     dstmask = (uint64_t) 1 << dst;
 
     score = 0;
-    if(type >= MOVETYPE_PROMQ)
-        score += pscore[PIECE_QUEEN + type - MOVETYPE_PROMQ];
+    if(type >= MOVETYPE_PROMQ && type <= MOVETYPE_PROMN)
+        score += pscore[PIECE_QUEEN + (type - MOVETYPE_PROMQ)];
 
-    for(psrc=PIECE_KING; psrc<PIECE_COUNT; psrc++)
-        if(board->pboards[board->tomove][psrc] & srcmask)
-            break;
-    
-    if(board->pboards[!board->tomove][PIECE_NONE] & dstmask)
-    {
-        for(pdst=PIECE_KING; pdst<PIECE_COUNT; pdst++)
-            if(board->pboards[!board->tomove][pdst] & dstmask)
-                break;
+    psrc = board->sqrs[src] & SQUARE_MASK_TYPE;
+    pdst = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
+    if(pdst)
         score += pscore[pdst] - pscore[psrc];
-    }
 
     if(board->attacks[!board->tomove] & dstmask)
         score -= pscore[psrc];
@@ -199,7 +183,7 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     return score;
 }
 
-static void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MOVE])
+void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MOVE])
 {
     int i;
 

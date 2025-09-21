@@ -60,10 +60,7 @@ uint64_t zobrist_hash(board_t* board)
     {
         for(p=0; p<board->npiece[t]; p++)
         {
-            for(type=PIECE_KING; type<PIECE_COUNT; type++)
-                if(board->pboards[t][type] & (uint64_t) 1 << board->ptable[t][p])
-                    break;
-
+            type = board->sqrs[board->ptable[t][p]] & SQUARE_MASK_TYPE;
             hash ^= sqrhashes[type][board->ptable[t][p]];
         }
     }

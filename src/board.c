@@ -9,29 +9,22 @@
 
 void board_findpieces(board_t* board)
 {
+    int sqr;
+    
     team_e t;
     piece_e p;
-    int sqr;
-
-    bitboard_t sqrmask;
 
     board->npiece[TEAM_WHITE] = board->npiece[TEAM_BLACK] = 0;
 
     for(sqr=0; sqr<BOARD_AREA; sqr++)
     {
-        sqrmask = (uint64_t) 1 << sqr;
+        t = board->sqrs[sqr] >> SQUARE_BITS_TEAM;
+        p = board->sqrs[sqr] & SQUARE_MASK_TYPE;
 
-        for(t=0; t<TEAM_COUNT; t++)
-        {
-            if(!(sqrmask & board->pboards[t][PIECE_NONE]))
-                continue;
+        if(!p)
+            continue;
 
-            for(p=0; p<PIECE_COUNT; p++)
-                if(sqrmask & board->pboards[t][p])
-                    break;
-            
-            board->ptable[t][board->npiece[t]++] = sqr;
-        }
+        board->ptable[t][board->npiece[t]++] = sqr;
     }
 }
 

@@ -508,8 +508,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
         if(board->enpas == dst)
         {
-            move = 0;
-            move |= src;
+            move = src;
             move |= dst << MOVEBITS_DST_BITS;
             move |= ((uint16_t)MOVETYPE_ENPAS) << MOVEBITS_TYP_BITS;
             move_addiflegal(board, set, move, PIECE_PAWN, team);
@@ -523,8 +522,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
         
         for(type=starttype; type<=stoptype; type++)
         {
-            move = 0;
-            move |= src;
+            move = src;
             move |= dst << MOVEBITS_DST_BITS;
             move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
             move_addiflegal(board, set, move, PIECE_PAWN, team);
@@ -617,38 +615,27 @@ static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e 
 
 void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
 {
-    bitboard_t srcmask;
-
-    srcmask = (uint64_t) 1 << src;
-         if(board->pboards[TEAM_WHITE][PIECE_KING] & srcmask)
-        move_kingmoves(moves, board, src, TEAM_WHITE, caponly);
-    else if(board->pboards[TEAM_BLACK][PIECE_KING] & srcmask)
-        move_kingmoves(moves, board, src, TEAM_BLACK, caponly);
-
-    else if(board->pboards[TEAM_WHITE][PIECE_QUEEN] & srcmask)
-        move_queenmoves(moves, board, src, TEAM_WHITE, caponly);
-    else if(board->pboards[TEAM_BLACK][PIECE_QUEEN] & srcmask)
-        move_queenmoves(moves, board, src, TEAM_BLACK, caponly);
-
-    else if(board->pboards[TEAM_WHITE][PIECE_ROOK] & srcmask)
-        move_rookmoves(moves, board, src, TEAM_WHITE, caponly);
-    else if(board->pboards[TEAM_BLACK][PIECE_ROOK] & srcmask)
-        move_rookmoves(moves, board, src, TEAM_BLACK, caponly);
-
-    else if(board->pboards[TEAM_WHITE][PIECE_BISHOP] & srcmask)
-        move_bishopmoves(moves, board, src, TEAM_WHITE, caponly);
-    else if(board->pboards[TEAM_BLACK][PIECE_BISHOP] & srcmask)
-        move_bishopmoves(moves, board, src, TEAM_BLACK, caponly);
-
-    else if(board->pboards[TEAM_WHITE][PIECE_KNIGHT] & srcmask)
-        move_knightmoves(moves, board, src, TEAM_WHITE, caponly);
-    else if(board->pboards[TEAM_BLACK][PIECE_KNIGHT] & srcmask)
-        move_knightmoves(moves, board, src, TEAM_BLACK, caponly);
-
-    else if(board->pboards[TEAM_WHITE][PIECE_PAWN] & srcmask)
-        move_pawnmoves(moves, board, src, TEAM_WHITE, caponly);
-    else if(board->pboards[TEAM_BLACK][PIECE_PAWN] & srcmask)
-        move_pawnmoves(moves, board, src, TEAM_BLACK, caponly);
+    switch(board->sqrs[src] & SQUARE_MASK_TYPE)
+    {
+    case PIECE_KING:
+        move_kingmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        break;
+    case PIECE_QUEEN:
+        move_queenmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        break;
+    case PIECE_ROOK:
+        move_rookmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        break;
+    case PIECE_BISHOP:
+        move_bishopmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        break;
+    case PIECE_KNIGHT:
+        move_knightmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        break;
+    case PIECE_PAWN:
+        move_pawnmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        break;
+    }
 }
 
 void move_alllegal(board_t* board, moveset_t* outmoves, bool caponly)

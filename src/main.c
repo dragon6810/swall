@@ -6,6 +6,7 @@
 #include "brain.h"
 #include "move.h"
 #include "tests.h"
+#include "zobrist.h"
 
 #define MAX_INPUT 512
 
@@ -159,6 +160,8 @@ void uci_cmd_position(const char* args)
         while(*args && *args <= 32)
             args++;
     }
+
+    printf("zobrist: %16llx\n", zobrist_hash(&board));
 }
 
 void uci_cmd_isready(void)
@@ -187,6 +190,7 @@ void uci_main(void)
     move_findattacks(&board);
     move_findpins(&board);
     board_findcheck(&board);
+    zobrist_init();
 
     while(1)
     {
