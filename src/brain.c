@@ -236,7 +236,7 @@ bool searchcanceled;
 int searchtime;
 
 // if search is canceled, dont trust the results!
-static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, move_t* outmove)
+static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, int rootdepth, move_t* outmove)
 {
     int i;
 
@@ -274,7 +274,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     {
         eval = 0; // stalemate
         if(board->check[board->tomove])
-            eval = INT16_MIN + 1; // checkmate
+            eval = -10000 + rootdepth; // checkmate
 
         // transpose_store(&board->ttable, hash, depth, eval);
         return eval;
@@ -283,7 +283,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     for(i=0; i<moves.count; i++)
     {
         move_make(board, moves.moves[i], &mademove);
-        eval = -brain_search(board, -beta, -alpha, depth - 1, NULL);
+        eval = -brain_search(board, -beta, -alpha, depth - 1, rootdepth + 1, NULL);
         move_unmake(board, &mademove);
 
         if(searchcanceled)
@@ -294,7 +294,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
             alpha = eval;
             alphamove = moves.moves[i];
         }
-        
+
         if(alpha >= beta)
             return alpha;
     }
@@ -310,6 +310,7 @@ move_t brain_runsearch(board_t* board, int timems)
 {
     int i;
 
+    int16_t eval;
     move_t move, safemove;
 
     ntranspos = 0;
@@ -318,13 +319,18 @@ move_t brain_runsearch(board_t* board, int timems)
     searchcanceled = false;
 
     for(i=1, safemove=0;; i++)
-    {
-        brain_search(board, INT16_MIN + 1, INT16_MAX, i, &move);
-        
-        if(!searchcanceled)
-            safemove = move;
-        else
+    {   
+        eval = brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, &move);
+
+        if(searchcanceled)
             break;
+        
+        printf("eval: %hd (%c%c%c%c)\n", eval,
+            'a' + (move & MOVEBITS_SRC_MASK) % BOARD_LEN, 
+            '1' + (move & MOVEBITS_SRC_MASK) / BOARD_LEN,
+            'a' + ((move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS) % BOARD_LEN, 
+            '1' + ((move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS) / BOARD_LEN);
+        safemove = move;
     }
 
     printf("searched to depth %d with %d transpositions\n", i - 1, ntranspos);
