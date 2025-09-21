@@ -163,11 +163,11 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     bitboard_t dstmask;
     int src, dst, type;
     piece_e psrc, pdst;
-    //transpos_t *transpos;
+    transpos_t *transpos;
 
-    //transpos = transpose_find(&board->ttableold, board->hash, 255);
-    //if(transpos && transpos->bestmove == mv)
-    //    return 9950; // a little less than mate
+    transpos = transpose_find(&board->ttableold, board->hash, 255);
+    if(transpos && transpos->bestmove == mv)
+        return 9950; // a little less than mate
 
     src = (mv & MOVEBITS_SRC_MASK) >> MOVEBITS_SRC_BITS;
     dst = (mv & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
