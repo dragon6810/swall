@@ -254,6 +254,10 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         return 0;
     }
 
+    // three-fold repitition or fifty-move
+    if(board->stalemate)
+        return 0;
+
     hash = zobrist_hash(board);
     transpos = transpose_find(&board->ttable, hash, depth);
     if(transpos)
@@ -309,7 +313,6 @@ move_t brain_runsearch(board_t* board, int timems)
 {
     int i;
 
-    int16_t eval;
     move_t move, safemove;
 
     ntranspos = 0;
@@ -320,16 +323,11 @@ move_t brain_runsearch(board_t* board, int timems)
     for(i=1, safemove=0;; i++)
     {
         transpose_clear(&board->ttable);
-        eval = brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, &move);
+        brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, &move);
 
         if(searchcanceled)
             break;
-        
-        printf("eval: %hd (%c%c%c%c)\n", eval,
-            'a' + (move & MOVEBITS_SRC_MASK) % BOARD_LEN, 
-            '1' + (move & MOVEBITS_SRC_MASK) / BOARD_LEN,
-            'a' + ((move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS) % BOARD_LEN, 
-            '1' + ((move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS) / BOARD_LEN);
+
         safemove = move;
     }
 

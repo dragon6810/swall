@@ -79,7 +79,7 @@ void uci_cmd_go(const char* args)
     int src, dst;
     char str[6];
 
-    move = brain_runsearch(&board, 100);
+    move = brain_runsearch(&board, 1000);
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;

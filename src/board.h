@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "transpose.h"
+#include "zobrist.h"
 
 #define BOARD_LEN 8
 #define BOARD_AREA (BOARD_LEN * BOARD_LEN)
@@ -68,6 +69,9 @@ typedef struct board_s
     uint8_t npiece[TEAM_COUNT];
     uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     square_t sqrs[BOARD_AREA];
+
+    zobristdict_t threefold;
+    bool stalemate;
 
     bitboard_t attacks[TEAM_COUNT];
     uint8_t npins[TEAM_COUNT];

@@ -5,6 +5,26 @@
 #include <stdlib.h>
 #include <string.h>
 
+void move_addtothreefold(board_t* board, int add)
+{
+    uint64_t hash;
+    int16_t *pval;
+
+    board->stalemate = false;
+
+    hash = zobrist_hash(board);
+
+    pval = zobrist_find(&board->threefold, hash);
+    if(pval)
+    {
+        *pval += add;
+        board->stalemate = *pval >= 3;
+        return;
+    }
+
+    zobrist_set(&board->threefold, hash, add);
+}
+
 void move_make(board_t* board, move_t move, mademove_t* outmove)
 {
     int type, src, dst;
@@ -149,6 +169,8 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
         board_printbits(board->pboards[!board->tomove][PIECE_KING]);
         exit(1);
     }
+
+    move_addtothreefold(board, 1);
 }
 
 // there's a lot of repeated code from move_domove.
@@ -163,6 +185,8 @@ void move_unmake(board_t* board, const mademove_t* move)
     bitboard_t srcmask, dstmask, cstlsrc, cstldst;
     int cstlsrcsqr, cstldstsqr;
     int enpasoffs;
+
+    move_addtothreefold(board, -1);
 
     board->enpas = move->enpas;
     for(i=0; i<TEAM_COUNT; i++)

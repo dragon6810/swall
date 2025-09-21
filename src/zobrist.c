@@ -1,6 +1,7 @@
 #include "zobrist.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "board.h"
 
@@ -66,4 +67,73 @@ uint64_t zobrist_hash(board_t* board)
     }
 
     return hash;
+}
+
+void zobrist_alloctable(zobristdict_t* table, uint64_t buckets)
+{
+    table->size = buckets;
+    table->data = malloc(buckets * sizeof(zobristentry_t*));
+    memset(table->data, 0, buckets * sizeof(zobristentry_t*));
+}
+
+int16_t* zobrist_find(zobristdict_t* table, uint64_t hash)
+{
+    zobristentry_t *cur;
+
+    uint64_t idx;
+
+    idx = hash % table->size;
+    
+    for(cur=table->data[idx]; cur; cur=cur->next)
+        if(cur->key == hash)
+            return &cur->val;
+    return NULL;
+}
+
+void zobrist_set(zobristdict_t* table, uint64_t hash, int16_t val)
+{
+    zobristentry_t *cur;
+
+    uint64_t idx;
+    zobristentry_t *newentry;
+
+    idx = hash % table->size;
+    
+    for(cur=table->data[idx]; cur; cur=cur->next)
+    {
+        if(cur->key != hash)
+            continue;
+
+        cur->val = val;
+        return;
+    }
+
+    newentry = malloc(sizeof(zobristentry_t));
+    newentry->key = hash;
+    newentry->val = val;
+    newentry->next = table->data[idx];
+    table->data[idx] = newentry;
+}
+
+void zobrist_freetable(zobristdict_t* table)
+{
+    int i;
+    zobristentry_t *cur, *next;
+
+    for(i=0; i<table->size; i++)
+    {
+        cur = table->data[i];
+        while (cur)
+        {
+            next = cur->next;
+            free(cur);
+            cur = next;
+        }
+    }
+
+    if(table->data)
+        free(table->data);
+
+    table->size = 0;
+    table->data = NULL;
 }
