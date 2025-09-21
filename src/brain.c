@@ -235,6 +235,51 @@ clock_t searchstart;
 bool searchcanceled;
 int searchtime;
 
+static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta)
+{
+    int i;
+
+    int16_t eval, besteval;
+    moveset_t moves;
+    mademove_t mademove;
+    int16_t scores[MAX_MOVE];
+
+    if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
+    {
+        searchcanceled = true;
+        return 0;
+    }
+
+    besteval = eval = brain_eval(board);
+    if(besteval >= beta)
+        return besteval;
+    if(besteval > alpha)
+        alpha = besteval;
+
+    move_alllegal(board, &moves, true);
+    brain_scoremoves(board, &moves, scores);
+    brain_sortmoves(&moves, scores);
+
+    for(i=0; i<moves.count; i++)
+    {
+        move_make(board, moves.moves[i], &mademove);
+        eval = -brain_quiesencesearch(board, -beta, -alpha);
+        move_unmake(board, &mademove);
+
+        if(searchcanceled)
+            return 0;
+
+        if(eval > besteval)
+            besteval = eval;
+        if(eval > alpha)
+            alpha = eval;
+        if(alpha >= beta)
+            return eval;
+    }
+
+    return besteval;
+}
+
 // if search is canceled, dont trust the results!
 static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, int rootdepth, move_t* outmove)
 {
@@ -267,7 +312,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     }
 
     if(!depth)
-        return brain_eval(board);
+        return brain_quiesencesearch(board, alpha, beta);
 
     move_alllegal(board, &moves, false);
     brain_scoremoves(board, &moves, scores);
