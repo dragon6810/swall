@@ -161,7 +161,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
             'a' + src % BOARD_LEN, '1' + src / BOARD_LEN, 'a' + dst % BOARD_LEN, '1' + dst / BOARD_LEN);
         board_print(board);
         printf("%s attack:\n", !board->tomove ? "white" : "black");
-        board_printbits(board->attacks[board->tomove]);
+        board_printbits(board->attacks[board->tomove][PIECE_NONE]);
         printf("%s king:\n", !board->tomove ? "black" : "white");
         board_printbits(board->pboards[!board->tomove][PIECE_KING]);
         exit(1);

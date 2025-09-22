@@ -33,7 +33,7 @@ void board_findcheck(board_t* board)
     int i;
 
     for(i=0; i<TEAM_COUNT; i++)
-        board->check[i] = (board->pboards[i][PIECE_KING] & board->attacks[!i]) != 0;
+        board->check[i] = (board->pboards[i][PIECE_KING] & board->attacks[!i][PIECE_NONE]) != 0;
 }
 
 #define PRINTUNICODE

@@ -264,9 +264,9 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     pdst = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
     if(pdst)
-        score += pscore[pdst] - pscore[psrc];
+        score += pscore[pdst];
 
-    if(board->attacks[!board->tomove] & dstmask)
+    if(board->attacks[!board->tomove][PIECE_NONE] & dstmask)
         score -= pscore[psrc];
 
     return score;

@@ -19,7 +19,6 @@ typedef struct zobristdict_s
     zobristentry_t **data;
 } zobristdict_t;
 
-void zobrist_init(void);
 uint64_t zobrist_hash(board_t* board);
 void zobrist_alloctable(zobristdict_t* table, uint64_t buckets);
 int16_t* zobrist_find(zobristdict_t* table, uint64_t hash);

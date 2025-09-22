@@ -144,7 +144,8 @@ void uci_cmd_position(const char* args)
     move_findattacks(&board);
     move_findpins(&board);
     board_findcheck(&board);
-
+    board.hash = zobrist_hash(&board);
+    
     transpose_alloc(&board.ttable, 64 * 1024);
     transpose_alloc(&board.ttableold, 64 * 1024);
 
@@ -195,7 +196,6 @@ void uci_main(void)
     board_findcheck(&board);
     transpose_alloc(&board.ttable, 64 * 1024);
     transpose_alloc(&board.ttableold, 64 * 1024);
-    zobrist_init();
 
     while(1)
     {

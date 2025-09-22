@@ -85,7 +85,7 @@ static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team
         for(dcur=dstart; dcur<=dend; dcur++)
             mask |= (uint64_t) 1 << dcur;
 
-        return !(board->attacks[!team] & mask);
+        return !(board->attacks[!team][PIECE_NONE] & mask);
     }
 
     for(i=0, curpin=board->pins[!team]; i<board->npins[!team]; i++, curpin++)
@@ -149,7 +149,7 @@ static void move_sweep
     }
 }
 
-static void move_sweepatk(board_t* board, bitboard_t* bits, uint8_t src, dir_e dir, int max, team_e team)
+static void move_sweepatk(board_t* board, piece_e ptype, uint8_t src, dir_e dir, int max, team_e team)
 {
     int i;
 
@@ -159,7 +159,8 @@ static void move_sweepatk(board_t* board, bitboard_t* bits, uint8_t src, dir_e d
     for(i=0, idx=src+diroffs[dir]; i<max; i++, idx+=diroffs[dir])
     {
         mask = (uint64_t) 1 << idx;
-        *bits |= mask;
+        board->attacks[team][ptype] |= mask;
+        board->attacks[team][PIECE_NONE] |= mask;
 
         if((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & mask
         && !(board->pboards[!team][PIECE_KING] & mask)) // should "go through" enemy king so they cant just backstep
@@ -195,7 +196,8 @@ static void move_pawnatk(board_t* board, uint8_t src, team_e team)
             continue;
 
         dst = src + diroffs[dirs[i]];
-        board->attacks[team] |= (uint64_t) 1 << dst;
+        board->attacks[team][PIECE_PAWN] |= (uint64_t) 1 << dst;
+        board->attacks[team][PIECE_NONE] |= (uint64_t) 1 << dst;
     }
 }
 
@@ -211,7 +213,8 @@ static void move_knightatk(board_t* board, uint8_t src, team_e team)
         if(dst < 0)
             continue;
 
-        board->attacks[team] |= (uint64_t) 1 << dst;
+        board->attacks[team][PIECE_KNIGHT] |= (uint64_t) 1 << dst;
+        board->attacks[team][PIECE_NONE] |= (uint64_t) 1 << dst;
     }
 }
 
@@ -220,7 +223,7 @@ static void move_bishopatk(board_t* board, uint8_t src, team_e team)
     int i;
 
     for(i=DIR_NE; i<DIR_COUNT; i++)
-        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i], team);
+        move_sweepatk(board, PIECE_BISHOP, src, i, sweeptable[src][i], team);
 }
 
 static void move_rookatk(board_t* board, uint8_t src, team_e team)
@@ -228,7 +231,7 @@ static void move_rookatk(board_t* board, uint8_t src, team_e team)
     int i;
 
     for(i=0; i<DIR_NE; i++)
-        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i], team);
+        move_sweepatk(board, PIECE_ROOK, src, i, sweeptable[src][i], team);
 }
 
 static void move_queenatk(board_t* board, uint8_t src, team_e team)
@@ -236,7 +239,7 @@ static void move_queenatk(board_t* board, uint8_t src, team_e team)
     int i;
 
     for(i=0; i<DIR_COUNT; i++)
-        move_sweepatk(board, &board->attacks[team], src, i, sweeptable[src][i], team);
+        move_sweepatk(board, PIECE_QUEEN, src, i, sweeptable[src][i], team);
 }
 
 static void move_kingatk(board_t* board, uint8_t src, team_e team)
@@ -245,7 +248,7 @@ static void move_kingatk(board_t* board, uint8_t src, team_e team)
     
     for(i=0; i<DIR_COUNT; i++)
         if(sweeptable[src][i])
-            move_sweepatk(board, &board->attacks[team], src, i, 1, team);
+            move_sweepatk(board, PIECE_KING, src, i, 1, team);
 }
 
 void move_findattacks(board_t* board)
@@ -256,7 +259,9 @@ void move_findattacks(board_t* board)
 
     for(i=0; i<TEAM_COUNT; i++)
     {
-        board->attacks[i] = 0;
+        for(j=0; j<PIECE_COUNT; j++)
+            board->attacks[i][j] = 0;
+
         for(j=0; j<board->npiece[i]; j++)
         {
             pmask = (uint64_t) 1 << board->ptable[i][j];
