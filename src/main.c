@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "board.h"
+#include "book.h"
 #include "brain.h"
 #include "move.h"
 #include "tests.h"
@@ -145,7 +146,7 @@ void uci_cmd_position(const char* args)
     move_findpins(&board);
     board_findcheck(&board);
     board.hash = zobrist_hash(&board);
-    
+
     transpose_alloc(&board.ttable, 64 * 1024);
     transpose_alloc(&board.ttableold, 64 * 1024);
 
@@ -194,6 +195,7 @@ void uci_main(void)
     move_findattacks(&board);
     move_findpins(&board);
     board_findcheck(&board);
+    board.hash = zobrist_hash(&board);
     transpose_alloc(&board.ttable, 64 * 1024);
     transpose_alloc(&board.ttableold, 64 * 1024);
 
@@ -234,6 +236,7 @@ int main(int argc, char** argv)
     setvbuf(stdout, NULL, _IONBF, 0);
 
     move_init();
+    book_load("gm2001.bin");
     //tests_movegen();
 
     uci_main();

@@ -5,6 +5,7 @@
 #include <strings.h>
 #include <time.h>
 
+#include "book.h"
 #include "zobrist.h"
 
 int16_t pscore[PIECE_COUNT] =
@@ -449,6 +450,9 @@ move_t brain_runsearch(board_t* board, int timems)
     searchstart = clock();
     searchtime = timems;
     searchcanceled = false;
+
+    if(book_findmove(board, &move))
+        return move;
 
     transpose_clear(&board->ttable);
     for(i=1, safemove=0;; i++)
