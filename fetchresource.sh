@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 
 cd run
-wget https://github.com/gmcheems-org/free-opening-books/raw/main/books/bin/gm2001.bin
+wget https://maughancdn.s3.amazonaws.com/chess/The%20Baron/baronbook30.zip
+unzip baronbook30.zip
+rm baronbook30.zip

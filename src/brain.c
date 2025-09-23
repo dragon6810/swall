@@ -368,7 +368,7 @@ static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta
 }
 
 // if search is canceled, dont trust the results!
-static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, int rootdepth, move_t* outmove)
+static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, int rootdepth, int next, move_t* outmove)
 {
     int i;
 
@@ -378,6 +378,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     int16_t eval;
     move_t alphamove;
     mademove_t mademove;
+    int ext;
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
     {
@@ -415,8 +416,12 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
 
     for(i=0; i<moves.count; i++)
     {
+        ext = 0;
+
         move_make(board, moves.moves[i], &mademove);
-        eval = -brain_search(board, -beta, -alpha, depth - 1, rootdepth + 1, NULL);
+        if(next > 0 && board->check[board->tomove])
+            ext++;
+        eval = -brain_search(board, -beta, -alpha, depth - 1 + ext, rootdepth + 1, next - ext, NULL);
         move_unmake(board, &mademove);
 
         if(searchcanceled)
@@ -454,10 +459,11 @@ move_t brain_runsearch(board_t* board, int timems)
     if(book_findmove(board, &move))
         return move;
 
-    transpose_clear(&board->ttable);
+    // transpose_clear(&board->ttable);
     for(i=1, safemove=0;; i++)
     {
-        brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, &move);
+        transpose_clear(&board->ttable);
+        brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, 16, &move);
 
         if(searchcanceled)
             break;

@@ -1,6 +1,8 @@
 #include <locale.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "board.h"
 #include "book.h"
@@ -80,7 +82,7 @@ void uci_cmd_go(const char* args)
     int src, dst;
     char str[6];
 
-    move = brain_runsearch(&board, 100);
+    move = brain_runsearch(&board, 1000);
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -235,8 +237,10 @@ int main(int argc, char** argv)
     setlocale(LC_ALL, ""); 
     setvbuf(stdout, NULL, _IONBF, 0);
 
+    srand(time(NULL));
+
     move_init();
-    book_load("gm2001.bin");
+    book_load("baron30.bin");
     //tests_movegen();
 
     uci_main();

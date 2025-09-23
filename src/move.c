@@ -54,11 +54,10 @@ static inline bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
 static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team)
 {
     int i;
-    uint8_t dcur;
     pinline_t *curpin;
 
     bitboard_t mask;
-    uint8_t src, dst, type, dstart, dend;
+    uint8_t src, dst, type;
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -66,24 +65,22 @@ static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team
 
     if(ptype == PIECE_KING)
     {
-        dstart = dend = dst;
+        mask = (uint64_t) 1 << dst;
         if(type == MOVETYPE_CASTLE)
         {
+            // kingside
             if(src < dst)
             {
-                dstart = src;
-                dend = dst;
+                mask |= (uint64_t) 1 << src;
+                mask |= (uint64_t) 1 << (src + 1);
             }
+            // queenside
             else
             {
-                dstart = dst;
-                dend = src;
+                mask |= (uint64_t) 1 << src;
+                mask |= (uint64_t) 1 << (src - 1);
             }
         }
-        
-        mask = 0;
-        for(dcur=dstart; dcur<=dend; dcur++)
-            mask |= (uint64_t) 1 << dcur;
 
         return !(board->attacks[!team][PIECE_NONE] & mask);
     }
@@ -580,14 +577,26 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 {
     int i;
 
+    int dst;
     move_t move;
     bitboard_t allpiece;
 
     allpiece = board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE];
 
     for(i=0; i<DIR_COUNT; i++)
-        if(sweeptable[src][i])
-            move_sweep(set, board, src, i, 1, false, MOVETYPE_DEFAULT, PIECE_KING, team, caponly);
+    {
+        if(!sweeptable[src][i])
+            continue;
+
+        dst = src + diroffs[i];
+
+        move = src;
+        move |= dst << MOVEBITS_DST_BITS;
+        if(caponly && board->pboards[!team][PIECE_NONE] & (uint64_t) 1 << dst)
+            continue;
+
+        move_addiflegal(board, set, move, PIECE_KING, team);
+    }
 
     if(!caponly)
     {
