@@ -8,7 +8,7 @@
 #include "book.h"
 #include "brain.h"
 #include "move.h"
-#include "tests.h"
+#include "perft.h"
 #include "zobrist.h"
 
 #define MAX_INPUT 4096
@@ -76,41 +76,45 @@ int tryparsemove(const char* str)
     return str - start;
 }
 
+void uci_cmd_perft(const char* args)
+{
+    char depthstr[MAX_INPUT];
+    const char *depthend;
+    int depth;
+
+    while(*args && *args <= 32)
+        args++;
+
+    depthend = args;
+    while(*depthend && *depthend >= '0' && *depthend <= '9')
+        depthend++;
+    
+    memcpy(depthstr, args, depthend - args);
+    depthstr[depthend - args] = 0;
+
+    depth = atoi(args);
+    if(depth <= 0)
+        return;
+
+    perft(&board, depth);
+}
+
 void uci_cmd_go(const char* args)
 {
     move_t move;
-    int src, dst;
-    char str[6];
+    char str[MAX_LONGALG];
 
-    move = brain_runsearch(&board, 1000);
-
-    src = move & MOVEBITS_SRC_MASK;
-    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-
-    str[0] = 'a' + src % BOARD_LEN;
-    str[1] = '1' + src / BOARD_LEN;
-    str[2] = 'a' + dst % BOARD_LEN;
-    str[3] = '1' + dst / BOARD_LEN;
-
-    switch((move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS)
+    while(*args && *args <= 32)
+        args++;
+    
+    if(!strncmp(args, "perft", 5))
     {
-    case MOVETYPE_PROMQ:
-        str[4] = 'q';
-        break;
-    case MOVETYPE_PROMR:
-        str[4] = 'r';
-        break;
-    case MOVETYPE_PROMB:
-        str[4] = 'b';
-        break;
-    case MOVETYPE_PROMN:
-        str[4] = 'n';
-        break;
-    default:
-        str[4] = 0;
+        uci_cmd_perft(args + 5);
+        return;
     }
 
-    str[5] = 0;
+    move = brain_runsearch(&board, 1000);
+    move_tolongalg(move, str);
 
     printf("bestmove %s\n", str);
 }

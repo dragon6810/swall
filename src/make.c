@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PAWN_OFFS(team) (team == TEAM_WHITE ? diroffs[DIR_N] : diroffs[DIR_S])
+#define PAWN_OFFS(team) ((team) == TEAM_WHITE ? diroffs[DIR_N] : diroffs[DIR_S])
 
 int16_t* move_threefold(board_t* board)
 {
@@ -42,6 +42,7 @@ static void move_docapture(board_t* board, move_t move, mademove_t* made)
     board->pboards[!team][capture] ^= dstmask;
 }
 
+// reversible
 static void move_docastle(board_t* board, move_t move)
 {
     int src, dst;
@@ -71,8 +72,9 @@ static void move_docastle(board_t* board, move_t move)
 
     rookmask = ((uint64_t) 1 << rooksrc) | ((uint64_t) 1 << rookdst);
 
-    board->sqrs[rooksrc] = SQUARE_EMPTY;
-    board->sqrs[rookdst] = team << SQUARE_BITS_TEAM | PIECE_ROOK;
+    board->sqrs[rooksrc] ^= board->sqrs[rookdst];
+    board->sqrs[rookdst] ^= board->sqrs[rooksrc];
+    board->sqrs[rooksrc] ^= board->sqrs[rookdst];
     board->pboards[team][PIECE_NONE] ^= rookmask;
     board->pboards[team][PIECE_ROOK] ^= rookmask;
 }
@@ -250,9 +252,7 @@ void move_unmake(board_t* board, const mademove_t* move)
     int type, src, dst;
     team_e team;
     piece_e ptype, oldtype;
-    bitboard_t srcmask, dstmask, cstlsrc, cstldst;
-    int cstlsrcsqr, cstldstsqr;
-    int enpasoffs;
+    bitboard_t srcmask, dstmask;
 
     (*move_threefold(board))--;
 
@@ -273,31 +273,7 @@ void move_unmake(board_t* board, const mademove_t* move)
     team = !board->tomove;
     ptype = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
-    if(type == MOVETYPE_CASTLE)
-    {
-        // kingside
-        if(dst > src)
-        {
-            cstlsrcsqr = dst + 1;
-            cstldstsqr = dst - 1;
-        }
-        // queenside
-        else
-        {
-            cstlsrcsqr = dst - 2;
-            cstldstsqr = dst + 1;
-        }
-
-        cstlsrc = (uint64_t) 1 << cstlsrcsqr;
-        cstldst = (uint64_t) 1 << cstldstsqr;
-
-        board->sqrs[cstlsrcsqr] = board->sqrs[cstldstsqr];
-        board->sqrs[cstldstsqr] = SQUARE_EMPTY;
-        board->pboards[team][PIECE_ROOK] ^= cstlsrc;
-        board->pboards[team][PIECE_NONE] ^= cstlsrc;
-        board->pboards[team][PIECE_ROOK] ^= cstldst;
-        board->pboards[team][PIECE_NONE] ^= cstldst;
-    }
+    move_docastle(board, move->move);
 
     switch(type)
     {
@@ -310,7 +286,7 @@ void move_unmake(board_t* board, const mademove_t* move)
     default:
         oldtype = ptype;
     }
-
+    
     board->sqrs[dst] = SQUARE_EMPTY;
     board->sqrs[src] = team << SQUARE_BITS_TEAM | oldtype;
     board->pboards[team][PIECE_NONE] ^= dstmask;
@@ -320,10 +296,9 @@ void move_unmake(board_t* board, const mademove_t* move)
 
     if(type == MOVETYPE_ENPAS)
     {
-        enpasoffs = team == TEAM_WHITE ? diroffs[DIR_S] : diroffs[DIR_N];
-        board->sqrs[board->enpas + enpasoffs] = !team << SQUARE_BITS_TEAM | PIECE_PAWN;
-        board->pboards[!team][PIECE_NONE] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
-        board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << (board->enpas + enpasoffs);
+        board->sqrs[board->enpas + PAWN_OFFS(!team)] = !team << SQUARE_BITS_TEAM | PIECE_PAWN;
+        board->pboards[!team][PIECE_NONE] ^= (uint64_t) 1 << (board->enpas + PAWN_OFFS(!team));
+        board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << (board->enpas + PAWN_OFFS(!team));
     }
     else if(move->captured)
     {

@@ -3,6 +3,8 @@
 
 #include "board.h"
 
+#define MAX_LONGALG 6
+
 static const int diroffs[DIR_COUNT] = 
 {
     1,
@@ -60,6 +62,7 @@ typedef struct mademove_s
     bool check[TEAM_COUNT];
 } mademove_t;
 
+void move_tolongalg(move_t move, char str[MAX_LONGALG]);
 void move_make(board_t* board, move_t move, mademove_t* outmove);
 void move_unmake(board_t* board, const mademove_t* move);
 void move_findattacks(board_t* board);

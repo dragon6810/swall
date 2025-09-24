@@ -77,7 +77,7 @@ typedef struct board_s
 
     bitboard_t attacks[TEAM_COUNT][PIECE_COUNT]; // PIECE_NONE is all pieces
     uint8_t npins[TEAM_COUNT];
-    pinline_t pins[TEAM_COUNT][PIECE_MAX*8];
+    pinline_t pins[TEAM_COUNT][PIECE_MAX];
     
     team_e tomove;
     bool check[TEAM_COUNT];

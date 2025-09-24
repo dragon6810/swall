@@ -8,6 +8,39 @@
 
 int sweeptable[BOARD_AREA][DIR_COUNT];
 
+void move_tolongalg(move_t move, char str[MAX_LONGALG])
+{
+    int src, dst;
+
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+
+    str[0] = 'a' + src % BOARD_LEN;
+    str[1] = '1' + src / BOARD_LEN;
+    str[2] = 'a' + dst % BOARD_LEN;
+    str[3] = '1' + dst / BOARD_LEN;
+
+    switch((move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS)
+    {
+    case MOVETYPE_PROMQ:
+        str[4] = 'q';
+        break;
+    case MOVETYPE_PROMR:
+        str[4] = 'r';
+        break;
+    case MOVETYPE_PROMB:
+        str[4] = 'b';
+        break;
+    case MOVETYPE_PROMN:
+        str[4] = 'n';
+        break;
+    default:
+        str[4] = 0;
+    }
+
+    str[5] = 0;
+}
+
 // 0 <= idx < 8
 // -1 means invalid
 static int move_knightoffs(int idx, int src)
@@ -579,7 +612,7 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
     int dst;
     move_t move;
-    bitboard_t allpiece;
+    bitboard_t dstmask, allpiece;
 
     allpiece = board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE];
 
@@ -589,33 +622,37 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
             continue;
 
         dst = src + diroffs[i];
+        dstmask = (uint64_t) 1 << dst;
 
         move = src;
         move |= dst << MOVEBITS_DST_BITS;
-        if(caponly && board->pboards[!team][PIECE_NONE] & (uint64_t) 1 << dst)
+        if(board->pboards[team][PIECE_NONE] & dstmask)
+            continue;
+        if(caponly && !(board->pboards[!team][PIECE_NONE] & dstmask))
             continue;
 
         move_addiflegal(board, set, move, PIECE_KING, team);
     }
 
-    if(!caponly)
+    if(caponly)
+        return;
+    
+    if(board->kcastle[team] 
+    && !(allpiece & ((uint64_t) 1 << (src + 1) | (uint64_t) 1 << (src + 2))))
     {
-        if(board->kcastle[team] && !(allpiece & ((uint64_t) 1 << (src + 1) | (uint64_t) 1 << (src + 2))))
-        {
-            move = src;
-            move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
-            move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-            move_addiflegal(board, set, move, PIECE_KING, team);
-        }
+        move = src;
+        move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
+        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+        move_addiflegal(board, set, move, PIECE_KING, team);
+    }
 
-        if(board->qcastle[team]
-        && !(allpiece & ((uint64_t) 1 << (src - 1) | (uint64_t) 1 << (src - 2) | (uint64_t) 1 << (src - 3))))
-        {
-            move = src;
-            move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
-            move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-            move_addiflegal(board, set, move, PIECE_KING, team);
-        }
+    if(board->qcastle[team]
+    && !(allpiece & ((uint64_t) 1 << (src - 1) | (uint64_t) 1 << (src - 2) | (uint64_t) 1 << (src - 3))))
+    {
+        move = src;
+        move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
+        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+        move_addiflegal(board, set, move, PIECE_KING, team);
     }
 }
 

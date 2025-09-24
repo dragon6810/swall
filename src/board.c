@@ -1,5 +1,6 @@
 #include "board.h"
 
+#include <assert.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -23,7 +24,7 @@ void board_findpieces(board_t* board)
 
         if(!p)
             continue;
-
+        
         board->ptable[t][board->npiece[t]++] = sqr;
     }
 }
