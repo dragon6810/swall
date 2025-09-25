@@ -24,7 +24,14 @@ void board_findpieces(board_t* board)
 
         if(!p)
             continue;
-        
+            
+        if(board->npiece[t] >= PIECE_MAX)
+        {
+            printf("board_findpieces: max pieces reached!\n");
+            board_print(board);
+            exit(1);
+        }
+
         board->ptable[t][board->npiece[t]++] = sqr;
     }
 }

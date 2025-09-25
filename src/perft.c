@@ -8,10 +8,8 @@ void perft_order(moveset_t* moves, int counts[MAX_MOVE])
 {
     int i, j;
 
-    int bestmv;
+    move_t bestmv;
     int bestidx;
-    move_t tempmv;
-    int tempcount;
 
     for(i=0; i<moves->count; i++)
     {
@@ -30,13 +28,13 @@ void perft_order(moveset_t* moves, int counts[MAX_MOVE])
         if(bestidx == i)
             continue;
 
-        tempmv = moves->moves[i];
-        moves->moves[i] = moves->moves[bestidx];
-        moves->moves[bestidx] = tempmv;
+        moves->moves[i] ^= moves->moves[bestidx];
+        moves->moves[bestidx] ^= moves->moves[i];
+        moves->moves[i] ^= moves->moves[bestidx];
 
-        tempcount = counts[i];
-        counts[i] = counts[bestidx];
-        counts[bestidx] = tempcount ;
+        counts[i] ^= counts[bestidx];
+        counts[bestidx] ^= counts[i];
+        counts[i] ^= counts[bestidx];
     }
 }
 

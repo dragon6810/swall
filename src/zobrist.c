@@ -1,5 +1,6 @@
 #include "zobrist.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -243,6 +244,8 @@ uint64_t zobrist_hash(board_t* board)
         for(p=0; p<board->npiece[t]; p++)
         {
             type = board->sqrs[board->ptable[t][p]] & SQUARE_MASK_TYPE;
+            assert(board->ptable[t][p] < BOARD_AREA);
+            assert((board->sqrs[board->ptable[t][p]] & SQUARE_MASK_TYPE) < PIECE_COUNT);
             hash ^= hashes[BOARD_AREA * piecetohash[t][type] + board->ptable[t][p]];
         }
     }

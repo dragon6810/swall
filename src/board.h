@@ -57,7 +57,7 @@ typedef struct pinline_s
 } pinline_t;
 
 #define SQUARE_BITS_TEAM 3 
-#define SQUARE_MASK_TEAM (1 << PIECE_MASK_BITS)
+#define SQUARE_MASK_TEAM (1 << SQUARE_BITS_TEAM)
 #define SQUARE_MASK_TYPE 0x7
 #define SQUARE_EMPTY 0
 

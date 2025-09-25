@@ -53,12 +53,11 @@ typedef struct mademove_s
     bool kcastle[TEAM_COUNT];
     bool qcastle[TEAM_COUNT];
 
-
     uint8_t npiece[TEAM_COUNT];
     uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     bitboard_t attacks[TEAM_COUNT][PIECE_COUNT]; // PIECE_NONE is all pieces
     uint8_t npins[TEAM_COUNT];
-    pinline_t pins[TEAM_COUNT][PIECE_MAX*8];
+    pinline_t pins[TEAM_COUNT][PIECE_MAX];
     bool check[TEAM_COUNT];
 } mademove_t;
 

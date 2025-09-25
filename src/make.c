@@ -141,13 +141,14 @@ static void move_updateenpas(board_t* board, move_t move, mademove_t* made)
     team = board->tomove;
     piece = board->sqrs[src] & SQUARE_MASK_TYPE;
 
+    board->enpas = 0xFF;
+
     if(piece != PIECE_PAWN)
         return;
 
     if(move_capenpas(board, move))
         made->captured = PIECE_PAWN;
-    
-    board->enpas = 0xFF;
+
     if(abs(dst - src) == BOARD_LEN * 2)
         board->enpas = src + PAWN_OFFS(team);
 }
@@ -262,6 +263,7 @@ void move_unmake(board_t* board, const mademove_t* move)
         board->kcastle[i] = move->kcastle[i];
         board->qcastle[i] = move->qcastle[i];
     }
+
     
     src = move->move & MOVEBITS_SRC_MASK;
     dst = (move->move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -286,8 +288,7 @@ void move_unmake(board_t* board, const mademove_t* move)
     default:
         oldtype = ptype;
     }
-    
-    board->sqrs[dst] = SQUARE_EMPTY;
+
     board->sqrs[src] = team << SQUARE_BITS_TEAM | oldtype;
     board->pboards[team][PIECE_NONE] ^= dstmask;
     board->pboards[team][ptype] ^= dstmask;
@@ -300,7 +301,9 @@ void move_unmake(board_t* board, const mademove_t* move)
         board->pboards[!team][PIECE_NONE] ^= (uint64_t) 1 << (board->enpas + PAWN_OFFS(!team));
         board->pboards[!team][PIECE_PAWN] ^= (uint64_t) 1 << (board->enpas + PAWN_OFFS(!team));
     }
-    else if(move->captured)
+    
+    board->sqrs[dst] = SQUARE_EMPTY;
+    if(move->captured)
     {
         board->sqrs[dst] = !team << SQUARE_BITS_TEAM | move->captured;
         board->pboards[!team][PIECE_NONE] ^= dstmask;
