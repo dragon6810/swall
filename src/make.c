@@ -110,26 +110,6 @@ static void move_updatecastlerights(board_t* board, move_t move)
         board->kcastle[!team] = false;
 }
 
-static bool move_capenpas(board_t* board, move_t move)
-{
-    int tile;
-    team_e team;
-    bitboard_t tilemask;
-
-    if((move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS != MOVETYPE_ENPAS)
-        return false;
-
-    team = board->tomove;
-    tile = board->enpas - PAWN_OFFS(team);
-    tilemask = (uint64_t) 1 << tile;
-
-    board->sqrs[tile] = SQUARE_EMPTY;
-    board->pboards[!team][PIECE_NONE] ^= tilemask;
-    board->pboards[!team][PIECE_PAWN] ^= tilemask;
-    
-    return true;
-}
-
 static void move_updateenpas(board_t* board, move_t move, mademove_t* made)
 {
     int src, dst;
@@ -146,11 +126,29 @@ static void move_updateenpas(board_t* board, move_t move, mademove_t* made)
     if(piece != PIECE_PAWN)
         return;
 
-    if(move_capenpas(board, move))
-        made->captured = PIECE_PAWN;
-
     if(abs(dst - src) == BOARD_LEN * 2)
         board->enpas = src + PAWN_OFFS(team);
+}
+
+static void move_doenpas(board_t* board, move_t move)
+{
+    int type;
+    team_e team;
+    int tile;
+    bitboard_t mask;
+    
+    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+    team = board->tomove;
+
+    if(type != MOVETYPE_ENPAS)
+        return;
+
+    tile = board->enpas + PAWN_OFFS(!team);
+    mask = (uint64_t) 1 << tile;
+
+    board->sqrs[tile] = SQUARE_EMPTY;
+    board->pboards[!team][PIECE_NONE] ^= mask;
+    board->pboards[!team][PIECE_PAWN] ^= mask;
 }
 
 static void move_copytomade(board_t* board, move_t move, mademove_t* made)
@@ -197,6 +195,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     ptype = board->sqrs[src] & SQUARE_MASK_TYPE;
 
     move_copytomade(board, move, outmove);
+    move_doenpas(board, move);
     move_updateenpas(board, move, outmove);
     move_updatecastlerights(board, move);
     move_docastle(board, move);
