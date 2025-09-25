@@ -1,41 +1,50 @@
 #include "perft.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "move.h"
 
-void perft_order(moveset_t* moves, int counts[MAX_MOVE])
+// are they in wrong order?
+static bool perft_moveorder(move_t moves[2])
 {
-    int i, j;
+    int i;
 
-    move_t bestmv;
-    int bestidx;
+    char strs[2][MAX_LONGALG];
 
-    for(i=0; i<moves->count; i++)
+    for(i=0; i<2; i++)
+        move_tolongalg(moves[i], strs[i]);
+
+    return strcmp(strs[0], strs[1]) > 0;
+}
+
+static void perft_order(moveset_t* moves, int counts[MAX_MOVE])
+{
+    int i;
+
+    bool swapped;
+    move_t pair[2];
+
+    do
     {
-        bestidx = i;
-        bestmv = moves->moves[i] & ~MOVEBITS_TYP_MASK;
-
-        for(j=i+1; j<moves->count; j++)
+        for(i=1, swapped=false; i<moves->count; i++)
         {
-            if((moves->moves[j] & ~MOVEBITS_TYP_MASK) < bestmv)
+            pair[0] = moves->moves[i-1];
+            pair[1] = moves->moves[i];
+            if(perft_moveorder(pair))
             {
-                bestmv = moves->moves[i] & ~MOVEBITS_TYP_MASK;
-                bestidx = j;
+                swapped = true;
+                moves->moves[i] ^= moves->moves[i-1];
+                moves->moves[i-1] ^= moves->moves[i];
+                moves->moves[i] ^= moves->moves[i-1];
+
+                counts[i] ^= counts[i-1];
+                counts[i-1] ^= counts[i];
+                counts[i] ^= counts[i-1];
             }
         }
-
-        if(bestidx == i)
-            continue;
-
-        moves->moves[i] ^= moves->moves[bestidx];
-        moves->moves[bestidx] ^= moves->moves[i];
-        moves->moves[i] ^= moves->moves[bestidx];
-
-        counts[i] ^= counts[bestidx];
-        counts[bestidx] ^= counts[i];
-        counts[i] ^= counts[bestidx];
     }
+    while (swapped);
 }
 
 int perft_r(board_t* board, int depthfromroot, int depth)
