@@ -358,6 +358,26 @@ badfen:
     return -1;
 }
 
+static void board_checkstalemate(board_t* board)
+{
+    int16_t *pval;
+
+    board->stalemate = false;
+
+    if(board->fiftymove >= 50)
+    {
+        board->stalemate = true;
+        return;
+    }
+    
+    pval = zobrist_find(&board->threefold, board->hash);
+    if(!pval)
+        return;
+
+    if(*pval >= 3)
+        board->stalemate = true;
+}
+
 void board_update(board_t* board)
 {
     board_findpieces(board);
@@ -366,4 +386,5 @@ void board_update(board_t* board)
     move_findthreats(board);
     board_findcheck(board);
     board->hash = zobrist_hash(board);
+    board_checkstalemate(board);
 }

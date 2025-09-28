@@ -66,6 +66,8 @@ typedef struct mademove_s
     bitboard_t threat;
     bool isenpaspin;
     bool check[TEAM_COUNT];
+
+    int fiftymove;
 } mademove_t;
 
 void move_tolongalg(move_t move, char str[MAX_LONGALG]);

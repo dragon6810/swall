@@ -9,8 +9,6 @@ int16_t* move_threefold(board_t* board)
 {
     int16_t *pval;
 
-    board->stalemate = false;
-
     pval = zobrist_find(&board->threefold, board->hash);
     if(pval)
         return pval;
@@ -150,6 +148,27 @@ static void move_doenpas(board_t* board, move_t move)
     board->pboards[!team][PIECE_PAWN] &= ~mask;
 }
 
+static void move_updatefiftymove(board_t* board, move_t move)
+{
+    int src, dst;
+    piece_e piece;
+
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+
+    piece = board->sqrs[src] & SQUARE_MASK_TYPE;
+
+    if(piece == PIECE_PAWN)
+        goto clear;
+    if(board->sqrs[dst] & SQUARE_MASK_TYPE)
+        goto clear;
+
+    return;
+
+clear:
+    board->fiftymove = 0;
+}
+
 static void move_copytomade(board_t* board, move_t move, mademove_t* made)
 {
     int dst;
@@ -166,6 +185,7 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
     made->isthreat = board->isthreat;
     made->threat = board->threat;
     made->isenpaspin = board->isenpaspin;
+    made->fiftymove = board->fiftymove;
 
     memcpy(made->npiece, board->npiece, sizeof(board->npiece));
     memcpy(made->ptable, board->ptable, sizeof(board->ptable));
@@ -192,6 +212,7 @@ static void move_copyfrommade(board_t* board, const mademove_t* made)
     board->isthreat = made->isthreat;
     board->threat = made->threat;
     board->isenpaspin = made->isenpaspin;
+    board->fiftymove = made->fiftymove;
 
     memcpy(board->npiece, made->npiece, sizeof(made->npiece));
     memcpy(board->ptable, made->ptable, sizeof(made->ptable));
@@ -218,6 +239,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     ptype = board->sqrs[src] & SQUARE_MASK_TYPE;
 
     move_copytomade(board, move, outmove);
+    move_updatefiftymove(board, move);
     move_doenpas(board, move);
     move_updateenpas(board, move, outmove);
     move_updatecastlerights(board, move);

@@ -67,6 +67,7 @@ typedef struct board_s
 
     zobristdict_t threefold;
     bool stalemate;
+    int fiftymove;
 
     bitboard_t attacks[TEAM_COUNT][PIECE_COUNT]; // PIECE_NONE is all pieces
     uint8_t npins;
