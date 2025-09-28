@@ -245,6 +245,9 @@ void uci_cmd_position(const char* args)
         board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     }
 
+    transpose_alloc(&board.ttable, 64 * 1024);
+    transpose_alloc(&board.ttableold, 64 * 1024);
+    
     board_update(&board);
 
     while(*args && *args <= 32)

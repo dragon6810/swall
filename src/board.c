@@ -163,6 +163,8 @@ int board_loadfen(board_t* board, const char* fen)
 
     if(board->ttable.data)
         transpose_free(&board->ttable);
+    if(board->ttableold.data)
+        transpose_free(&board->ttableold);
     zobrist_freetable(&board->threefold);
     memset(board, 0, sizeof(board_t));
 
