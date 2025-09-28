@@ -271,9 +271,13 @@ void uci_cmd_position(const char* args)
 
 void uci_cmd_isready(void)
 {
-    board_update(&board);
-
     printf("readyok\n");
+}
+
+void uci_cmd_ucinewgame(void)
+{
+    board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    board_update(&board);
 }
 
 void uci_cmd_uci(void)
@@ -288,8 +292,8 @@ void uci_main(void)
     char line[MAX_INPUT];
     char *c;
 
-    board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    board_update(&board);
+    uci_cmd_ucinewgame();
+    
     transpose_alloc(&board.ttable, 64 * 1024);
     transpose_alloc(&board.ttableold, 64 * 1024);
 
@@ -307,6 +311,8 @@ void uci_main(void)
 
         if(tryparsemove(line))
             continue;
+        else if(!strncmp(line, "ucinewgame", 10))
+            uci_cmd_ucinewgame();
         else if(!strncmp(line, "uci", 3))
             uci_cmd_uci();
         else if(!strncmp(line, "isready", 7))
