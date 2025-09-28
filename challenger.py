@@ -2,25 +2,21 @@
 import argparse, os, subprocess, sys, time, threading, queue, shutil
 import traceback
 
-# --- Config (hard-coded on purpose) ---
-BENCH_DIR    = ".bench"            # add to .gitignore
+# --- Config ---
+BENCH_DIR    = ".bench"                          # add to .gitignore
 POSITIONS_EP = os.path.join(BENCH_DIR, "positions.epd")
-GAMES        = 100                 # total games cap
-MOVETIME_MS  = 100                 # fixed movetime per move
+PGN_DIR      = os.path.join(BENCH_DIR, "pgn")
+GAMES        = 100                                # total games cap
+MOVETIME_MS  = 100                                # fixed movetime per move
 
-# ---------- Utilities ----------
 def log(msg): print(msg, flush=True)
 
 def run(cmd, cwd=None, shell=True, check=True, desc=None):
     where = cwd or os.getcwd()
-    if desc:
-        log(f"$ ({where}) {cmd}  # {desc}")
-    else:
-        log(f"$ ({where}) {cmd}")
+    log(f"$ ({where}) {cmd}" + (f"  # {desc}" if desc else ""))
     p = subprocess.run(cmd, cwd=cwd, shell=shell, text=True,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    if p.stdout:
-        log(p.stdout.rstrip())
+    if p.stdout: log(p.stdout.rstrip())
     if check and p.returncode != 0:
         raise RuntimeError(f"Command failed (exit {p.returncode}) in {where}:\n{cmd}\n{p.stdout}")
     return p.stdout
@@ -31,20 +27,14 @@ def clone_checkout(repo_root, commit, dest):
 
 def try_build(repo_dir):
     tried = []
-    for cmd in ("./cleanbuild.sh",
-                "bash ./cleanbuild.sh",
-                "bash scripts/cleanbuild.sh"):
+    for cmd in ("./cleanbuild.sh", "bash ./cleanbuild.sh", "bash scripts/cleanbuild.sh"):
         tried.append(cmd)
         try:
             run(cmd, cwd=repo_dir, desc="build")
             return
         except Exception as e:
             last_err = e
-    raise RuntimeError(
-        "Build failed.\n"
-        f"Tried: {', '.join(tried)}\n"
-        "Make sure your build script is tracked by git at the target commits, or edit challenger.py:try_build()."
-    ) from last_err
+    raise RuntimeError("Build failed.\nTried: " + ", ".join(tried)) from last_err
 
 def ensure_file(path, what):
     if not os.path.exists(path):
@@ -52,19 +42,15 @@ def ensure_file(path, what):
 
 # ---------- Load positions ----------
 def load_positions(epd_path):
-    """Return list of FENs (or 'startpos'). Accepts FEN/EPD; trims to first 6 fields."""
     if not os.path.exists(epd_path):
         return None
     fens = []
     with open(epd_path, "r", encoding="utf-8", errors="ignore") as f:
         for raw in f:
             line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
+            if not line or line.startswith("#"): continue
             if line.lower() == "startpos":
-                fens.append("startpos")
-                continue
-            # Accept EPD with ops: keep first 4–6 fields, force halfmove/fullmove present
+                fens.append("startpos"); continue
             parts = line.split()
             if len(parts) >= 4:
                 if len(parts) < 6:
@@ -82,7 +68,7 @@ class Reader(threading.Thread):
     def run(self):
         for line in iter(self.proc.stdout.readline, b""):
             s = line.decode(errors="replace")
-            # log(f"{self.log_prefix} {s.rstrip()}")  # enable to see engine chatter
+            # log(f"{self.log_prefix} {s.rstrip()}")
             self.q.put(s)
         self.q.put(None)
     def readline(self, timeout=None):
@@ -105,7 +91,7 @@ class UCIEngine:
         self.reader = Reader(self.proc, f"[{self.name}]")
         self.reader.start()
         self.send("uci"); self._expect("uciok", 10)
-        # consistency knobs if your engine supports them:
+        # Optional: reproducibility knobs if your engine supports them
         # self.send("setoption name UseBook value false")
         # self.send("setoption name Seed value 123456")
         self.send("isready"); self._expect("readyok", 10)
@@ -125,24 +111,19 @@ class UCIEngine:
             if line and token in line: return
         raise RuntimeError(f"{self.name}: timeout waiting for {token}")
     def newgame(self):
-        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", max(10, MOVETIME_MS * 2 / 1000))
-    def bestmove_startpos(self, moves_uci, movetime_ms):
-        if moves_uci:
-            self.send(f"position startpos moves {' '.join(moves_uci)}")
-        else:
-            self.send("position startpos")
-        self.send(f"go movetime {movetime_ms}")
-        return self._read_bestmove(movetime_ms)
+        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", 10)
     def bestmove_fen(self, start_fen, moves_uci, movetime_ms):
         if start_fen == "startpos":
-            return self.bestmove_startpos(moves_uci, movetime_ms)
-        if moves_uci:
-            self.send(f"position fen {start_fen} moves {' '.join(moves_uci)}")
+            if moves_uci:
+                self.send(f"position startpos moves {' '.join(moves_uci)}")
+            else:
+                self.send("position startpos")
         else:
-            self.send(f"position fen {start_fen}")
+            if moves_uci:
+                self.send(f"position fen {start_fen} moves {' '.join(moves_uci)}")
+            else:
+                self.send(f"position fen {start_fen}")
         self.send(f"go movetime {movetime_ms}")
-        return self._read_bestmove(movetime_ms)
-    def _read_bestmove(self, movetime_ms):
         deadline = time.time() + movetime_ms/1000 + 5
         best = None
         while time.time() < deadline:
@@ -150,77 +131,89 @@ class UCIEngine:
             if line is None: break
             if line.startswith("bestmove"):
                 parts = line.strip().split()
-                if len(parts) >= 2:
-                    best = parts[1]
+                if len(parts) >= 2: best = parts[1]
                 break
         return best
 
-# ---------- Minimal chess adjudication ----------
+# ---------- Adjudication + PGN ----------
 FILES = "abcdefgh"; RANKS = "12345678"
 def is_legal_uci_move(move):
     if move is None or len(move) < 4: return False
-    f1, r1, f2, r2 = move[0], move[1], move[2], move[3]
+    f1,r1,f2,r2 = move[0],move[1],move[2],move[3]
     return (f1 in FILES and f2 in FILES and r1 in RANKS and r2 in RANKS)
 
 try:
     import chess as _pc
+    import chess.pgn as _pgn
     HAVE_PYCHESS = True
 except Exception:
     HAVE_PYCHESS = False
 
+def save_pgn(game_id, code, start_fen, moves_uci, white_name, black_name, result_str, a_commit, b_commit):
+    if not HAVE_PYCHESS:
+        log("[warn] python-chess not available; PGN logging skipped.")
+        return
+    # Rebuild the game from FEN + UCI moves
+    board = _pc.Board() if start_fen == "startpos" else _pc.Board(start_fen)
+    for u in moves_uci:
+        try:
+            board.push_uci(u)
+        except Exception:
+            break
+    game = _pgn.Game.from_board(board)
+    # Basic headers
+    game.headers["Event"] = "swall challenger"
+    game.headers["Site"]  = "local"
+    game.headers["Date"]  = time.strftime("%Y.%m.%d")
+    game.headers["Round"] = str(game_id)
+    game.headers["White"] = white_name
+    game.headers["Black"] = black_name
+    game.headers["Result"] = result_str
+    game.headers["WhiteEngine"] = f"A ({a_commit})"
+    game.headers["BlackEngine"] = f"B ({b_commit})"
+    # Ensure dir
+    os.makedirs(PGN_DIR, exist_ok=True)
+    fname = os.path.join(PGN_DIR, f"{game_id}-{code}.pgn")
+    with open(fname, "w", encoding="utf-8") as f:
+        exporter = _pgn.StringExporter(headers=True, variations=False, comments=False)
+        f.write(game.accept(exporter))
+    log(f"[pgn] wrote {fname}")
+
 def play_from_fen(engW, engB, start_fen, movetime_ms, max_plies=300):
-    """One game from specific FEN, W=engW, B=engB."""
+    """Return (result_str, moves_uci_list)."""
+    moves_uci = []
     if HAVE_PYCHESS:
         b = _pc.Board() if start_fen == "startpos" else _pc.Board(start_fen)
-        sf = b.fen() if start_fen != "startpos" else "startpos"
+        sf = "startpos" if start_fen == "startpos" else b.fen()
         engW.newgame(); engB.newgame()
         while not b.is_game_over() and len(b.move_stack) < max_plies:
             side = engW if b.turn == _pc.WHITE else engB
             mv = side.bestmove_fen(sf, [m.uci() for m in b.move_stack], movetime_ms)
-            if not is_legal_uci_move(mv):
-                return "0-1" if b.turn == _pc.WHITE else "1-0"
+            if not is_legal_uci_move(mv):   # illegal/no move => side to move loses
+                return ("0-1" if b.turn == _pc.WHITE else "1-0", moves_uci)
             try:
                 b.push_uci(mv)
+                moves_uci.append(mv)
             except Exception:
-                return "0-1" if b.turn == _pc.WHITE else "1-0"
-        return b.result(claim_draw=True)
+                return ("0-1" if b.turn == _pc.WHITE else "1-0", moves_uci)
+        return (b.result(claim_draw=True), moves_uci)
     else:
-        # No python-chess: still play, but only format-check moves and draw on ply cap.
         engW.newgame(); engB.newgame()
-        moves = []
         for ply in range(max_plies):
             side = engW if ply % 2 == 0 else engB
-            mv = side.bestmove_fen(start_fen, moves, movetime_ms)
+            mv = side.bestmove_fen(start_fen, moves_uci, movetime_ms)
             if not is_legal_uci_move(mv):
-                return "0-1" if ply % 2 == 0 else "1-0"
-            moves.append(mv)
-        return "1/2-1/2"
+                return ("0-1" if ply % 2 == 0 else "1-0", moves_uci)
+            moves_uci.append(mv)
+        return ("1/2-1/2", moves_uci)
 
-def play_startpos_match(engW, engB, movetime_ms, max_plies=300):
-    """Backwards-compat: startpos alternating colors."""
-    if HAVE_PYCHESS:
-        b = _pc.Board()
-        engW.newgame(); engB.newgame()
-        while not b.is_game_over() and len(b.move_stack) < max_plies:
-            side = engW if b.turn == _pc.WHITE else engB
-            mv = side.bestmove_startpos([m.uci() for m in b.move_stack], movetime_ms)
-            if not is_legal_uci_move(mv):
-                return "0-1" if b.turn == _pc.WHITE else "1-0"
-            try:
-                b.push_uci(mv)
-            except Exception:
-                return "0-1" if b.turn == _pc.WHITE else "1-0"
-        return b.result(claim_draw=True)
-    else:
-        engW.newgame(); engB.newgame()
-        moves = []
-        for ply in range(max_plies):
-            side = engW if ply % 2 == 0 else engB
-            mv = side.bestmove_startpos(moves, movetime_ms)
-            if not is_legal_uci_move(mv):
-                return "0-1" if ply % 2 == 0 else "1-0"
-            moves.append(mv)
-        return "1/2-1/2"
+def result_code(result_str, a_is_white):
+    # result_str is "1-0", "0-1", or "1/2-1/2"
+    if result_str == "1/2-1/2": return "d"
+    if result_str == "1-0":
+        return "wa" if a_is_white else "wb"
+    else:  # "0-1"
+        return "wb" if a_is_white else "wa"
 
 # ---------- Main ----------
 def main():
@@ -234,14 +227,12 @@ def main():
     log(f"Commits: A={args.commit_a}  B={args.commit_b}")
     log(f"Work dir: {BENCH_DIR}")
 
-    # Prepare bench dirs
     os.makedirs(BENCH_DIR, exist_ok=True)
     a_dir = os.path.join(BENCH_DIR, "A")
     b_dir = os.path.join(BENCH_DIR, "B")
     if os.path.exists(a_dir): shutil.rmtree(a_dir)
     if os.path.exists(b_dir): shutil.rmtree(b_dir)
 
-    # Clone + build
     try:
         log(f"\nBuilding A ({args.commit_a})...")
         clone_checkout(os.getcwd(), args.commit_a, a_dir)
@@ -251,11 +242,8 @@ def main():
         clone_checkout(os.getcwd(), args.commit_b, b_dir)
         try_build(b_dir)
     except Exception as e:
-        log("\n[BUILD ERROR]")
-        log(str(e)); log(traceback.format_exc())
-        sys.exit(2)
+        log("\n[BUILD ERROR]"); log(str(e)); log(traceback.format_exc()); sys.exit(2)
 
-    # Ensure run/ and binary paths
     os.makedirs(os.path.join(a_dir, "run"), exist_ok=True)
     os.makedirs(os.path.join(b_dir, "run"), exist_ok=True)
     binA = os.path.join(a_dir, "bin", "swall")
@@ -264,28 +252,24 @@ def main():
         ensure_file(binA, "Engine A binary")
         ensure_file(binB, "Engine B binary")
     except Exception as e:
-        log("\n[SETUP ERROR]")
-        log(str(e))
-        sys.exit(3)
+        log("\n[SETUP ERROR]"); log(str(e)); sys.exit(3)
 
-    # Start engines
     engA = UCIEngine(["../bin/swall"], "A", workdir=os.path.join(a_dir, "run"))
     engB = UCIEngine(["../bin/swall"], "B", workdir=os.path.join(b_dir, "run"))
     try:
         engA.start(); engB.start()
     except Exception as e:
-        log("\n[UCI START ERROR]")
-        log(str(e)); log(traceback.format_exc())
-        sys.exit(4)
+        log("\n[UCI START ERROR]"); log(str(e)); log(traceback.format_exc()); sys.exit(4)
 
-    # Load positions (if present)
     fens = load_positions(POSITIONS_EP)
     if fens:
         log(f"\nLoaded {len(fens)} positions from {POSITIONS_EP}")
     else:
         log("\nNo positions file found; using startpos")
 
-    # Play games
+    # Ensure PGN dir exists
+    os.makedirs(PGN_DIR, exist_ok=True)
+
     a_w = b_w = d = 0
     played = 0
     try:
@@ -293,40 +277,52 @@ def main():
             log(f"Running up to {GAMES} games from positions (movetime {MOVETIME_MS} ms)...\n")
             for idx, fen in enumerate(fens, start=1):
                 if played >= GAMES: break
-                # A as White
-                res = play_from_fen(engA, engB, fen, MOVETIME_MS)
+
+                # Game 1: A as White
+                res, moves = play_from_fen(engA, engB, fen, MOVETIME_MS)
                 played += 1
+                code = result_code(res, a_is_white=True)
                 if res == "1-0": a_w += 1
                 elif res == "0-1": b_w += 1
                 else: d += 1
+                save_pgn(played, code, fen, moves, f"A ({args.commit_a})", f"B ({args.commit_b})", res, args.commit_a, args.commit_b)
                 log(f"[{idx}/{len(fens)}] Game {played}/{GAMES}: {res}   (A:{a_w} D:{d} B:{b_w})")
 
                 if played >= GAMES: break
-                # B as White
-                res = play_from_fen(engB, engA, fen, MOVETIME_MS)
+
+                # Game 2: B as White
+                res, moves = play_from_fen(engB, engA, fen, MOVETIME_MS)
                 played += 1
+                code = result_code(res, a_is_white=False)
                 if res == "1-0": b_w += 1
                 elif res == "0-1": a_w += 1
                 else: d += 1
+                save_pgn(played, code, fen, moves, f"B ({args.commit_b})", f"A ({args.commit_a})", res, args.commit_a, args.commit_b)
                 log(f"[{idx}/{len(fens)}] Game {played}/{GAMES}: {res}   (A:{a_w} D:{d} B:{b_w})")
         else:
             log(f"Running {GAMES} games (startpos, movetime {MOVETIME_MS} ms)...\n")
+            fen = "startpos"
             for g in range(1, GAMES + 1):
-                if g % 2 == 1:
-                    res = play_startpos_match(engA, engB, MOVETIME_MS)
+                a_white = (g % 2 == 1)
+                if a_white:
+                    res, moves = play_from_fen(engA, engB, fen, MOVETIME_MS)
+                    code = result_code(res, a_is_white=True)
                     if res == "1-0": a_w += 1
                     elif res == "0-1": b_w += 1
                     else: d += 1
+                    save_pgn(g, code, fen, moves, f"A ({args.commit_a})", f"B ({args.commit_b})", res, args.commit_a, args.commit_b)
                 else:
-                    res = play_startpos_match(engB, engA, MOVETIME_MS)
+                    res, moves = play_from_fen(engB, engA, fen, MOVETIME_MS)
+                    code = result_code(res, a_is_white=False)
                     if res == "1-0": b_w += 1
                     elif res == "0-1": a_w += 1
                     else: d += 1
+                    save_pgn(g, code, fen, moves, f"B ({args.commit_b})", f"A ({args.commit_a})", res, args.commit_a, args.commit_b)
+                played = g
                 log(f"Game {g}/{GAMES}: {res}   (A:{a_w}  D:{d}  B:{b_w})")
     finally:
         engA.stop(); engB.stop()
 
-    # Summary
     log("\n=== Results ===")
     log(f"A wins: {a_w}")
     log(f"Draws : {d}")
