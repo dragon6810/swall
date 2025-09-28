@@ -103,6 +103,9 @@ void uci_cmd_go(const char* args)
 {
     move_t move;
     char str[MAX_LONGALG];
+    char arg[MAX_INPUT];
+    const char *argend;
+    int times[TEAM_COUNT], searchtime;
 
     while(*args && *args <= 32)
         args++;
@@ -113,7 +116,76 @@ void uci_cmd_go(const char* args)
         return;
     }
 
-    move = brain_runsearch(&board, 1000);
+    times[TEAM_WHITE] = times[TEAM_BLACK] = 0;
+    while(1)
+    {
+        while(*args && *args <= 32)
+            args++;
+
+        if(!*args)
+            break;
+
+        if(!strncmp(args, "wtime", 5))
+        {
+            args += 5;
+            while(*args && *args <= 32)
+                args++;
+
+            argend = args;
+            while(*argend && *argend >= '0' && *argend <= '9')
+                argend++;
+            
+            memcpy(arg, args, argend - args);
+            arg[argend - args] = 0;
+
+            times[TEAM_WHITE] = atoi(arg);
+            args += argend - args;
+
+            if(times[TEAM_WHITE] <= 0)
+            {
+                times[TEAM_WHITE] = 0;
+                continue;
+            }
+
+            continue;
+        }
+
+        else if(!strncmp(args, "btime", 5))
+        {
+            args += 5;
+            while(*args && *args <= 32)
+                args++;
+
+            argend = args;
+            while(*argend && *argend >= '0' && *argend <= '9')
+                argend++;
+            
+            memcpy(arg, args, argend - args);
+            arg[argend - args] = 0;
+
+            times[TEAM_BLACK] = atoi(arg);
+            args += argend - args;
+
+            if(times[TEAM_BLACK] <= 0)
+            {
+                times[TEAM_BLACK] = 0;
+                continue;
+            }
+
+            continue;
+        }
+
+        else
+            break;
+    }
+
+    searchtime = 100;
+    if(times[board.tomove])
+        searchtime = times[board.tomove] / 25;
+
+    printf("time: %d\n", searchtime);
+
+    move = brain_runsearch(&board, searchtime);
     move_tolongalg(move, str);
 
     printf("bestmove %s\n", str);

@@ -69,6 +69,58 @@ void book_load(const char* path)
     fclose(ptr);
 }
 
+move_t book_fromentry(board_t* board, bookentry_t* entry)
+{
+    piece_e ptype;
+    int src, dst, srcf, srcr, dstf, dstr, promp;
+    move_t move;
+
+    dstf = entry->move & 0x7;
+    dstr = (entry->move >> 3) & 0x7;
+    srcf = (entry->move >> 6) & 0x7;
+    srcr = (entry->move >> 9) & 0x7;
+    promp = (entry->move >> 12) & 0x7;
+
+    src = srcr * BOARD_LEN + srcf;
+    dst = dstr * BOARD_LEN + dstf;
+
+    move = 0;
+
+    ptype = board->sqrs[src] & SQUARE_MASK_TYPE;
+    if(ptype == PIECE_KING && dst - src == 3)
+    {
+        dst--;
+        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+    }
+    if(ptype == PIECE_KING && src - dst == 4)
+    {
+        dst += 2;
+        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
+    }
+
+    move |= src;
+    move |= dst << MOVEBITS_DST_BITS;
+    switch(promp)
+    {
+    case 1:
+        move |= ((uint16_t) MOVETYPE_PROMN) << MOVEBITS_TYP_BITS;
+        break;
+    case 2:
+        move |= ((uint16_t) MOVETYPE_PROMB) << MOVEBITS_TYP_BITS;
+        break;
+    case 3:
+        move |= ((uint16_t) MOVETYPE_PROMR) << MOVEBITS_TYP_BITS;
+        break;
+    case 4:
+        move |= ((uint16_t) MOVETYPE_PROMQ) << MOVEBITS_TYP_BITS;
+        break;
+    default:
+        break;
+    }
+
+    return move;
+}
+
 bool book_findmove(board_t* board, move_t* outmove)
 {
     int i;
@@ -76,7 +128,6 @@ bool book_findmove(board_t* board, move_t* outmove)
     int weightsum;
     float accumweight, scaledweight;
     float random;
-    int srcf, srcr, dstf, dstr, promp;
 
     for(i=weightsum=0; i<nentrites; i++)
     {
@@ -102,32 +153,7 @@ bool book_findmove(board_t* board, move_t* outmove)
         if(random < accumweight - scaledweight || random > accumweight)
             continue;
 
-        dstf = entries[i].move & 0x7;
-        dstr = (entries[i].move >> 3) & 0x7;
-        srcf = (entries[i].move >> 6) & 0x7;
-        srcr = (entries[i].move >> 9) & 0x7;
-        promp = (entries[i].move >> 12) & 0x7;
-
-        *outmove = srcr * BOARD_LEN + srcf;
-        *outmove |= (dstr * BOARD_LEN + dstf) << MOVEBITS_DST_BITS;
-        switch(promp)
-        {
-        case 1:
-            *outmove |= ((uint16_t) MOVETYPE_PROMN) << MOVEBITS_TYP_BITS;
-            break;
-        case 2:
-            *outmove |= ((uint16_t) MOVETYPE_PROMB) << MOVEBITS_TYP_BITS;
-            break;
-        case 3:
-            *outmove |= ((uint16_t) MOVETYPE_PROMR) << MOVEBITS_TYP_BITS;
-            break;
-        case 4:
-            *outmove |= ((uint16_t) MOVETYPE_PROMQ) << MOVEBITS_TYP_BITS;
-            break;
-        default:
-            break;
-        }
-
+        *outmove = book_fromentry(board, &entries[i]);
         return true;
     }
 
