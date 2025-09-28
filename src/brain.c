@@ -403,6 +403,8 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     if(transpos)
     {
         ntranspos++;
+        if(outmove)
+            *outmove = transpos->bestmove;
         return transpos->eval;
     }
 

@@ -7,7 +7,7 @@ BENCH_DIR    = ".bench"                          # add to .gitignore
 POSITIONS_EP = os.path.join(BENCH_DIR, "positions.epd")
 PGN_DIR      = os.path.join(BENCH_DIR, "pgn")
 GAMES        = 100                                # total games cap
-MOVETIME_MS  = 100                                # fixed movetime per move
+MOVETIME_MS  = 50                                # fixed movetime per move
 
 def log(msg): print(msg, flush=True)
 
