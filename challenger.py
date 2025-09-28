@@ -102,7 +102,7 @@ class UCIEngine:
             if line and token in line: return
         raise RuntimeError(f"{self.name}: timeout waiting for {token}")
     def newgame(self):
-        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", 10)
+        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", MOVETIME_MS * 2)
     def bestmove(self, moves_san, movetime_ms):
         if moves_san:
             self.send(f"position startpos moves {' '.join(moves_san)}")
