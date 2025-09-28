@@ -243,7 +243,13 @@ static int16_t brain_eval(board_t* board)
     return eval;
 }
 
-static int16_t brain_moveguess(board_t* board, move_t mv)
+int ntranspos = 0;
+clock_t searchstart;
+bool searchcanceled;
+int searchtime;
+move_t bestknown;
+
+static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
 {
     int16_t score;
 
@@ -251,6 +257,9 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     int src, dst, type;
     piece_e psrc, pdst;
     transpos_t *transpos;
+
+    if(!plies && mv == bestknown)
+        return 9951;
 
     transpos = transpose_find(&board->ttable, board->hash, 0, true);
     if(transpos && transpos->bestmove == mv)
@@ -278,12 +287,12 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     return score;
 }
 
-static void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MOVE])
+static void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MOVE], int plies)
 {
     int i;
 
     for(i=0; i<moves->count; i++)
-        outscores[i] = brain_moveguess(board, moves->moves[i]);
+        outscores[i] = brain_moveguess(board, moves->moves[i], plies);
 }
 
 static void brain_sortmoves(moveset_t* moves, int16_t* scores)
@@ -322,11 +331,6 @@ static void brain_sortmoves(moveset_t* moves, int16_t* scores)
     }
 }
 
-int ntranspos = 0;
-clock_t searchstart;
-bool searchcanceled;
-int searchtime;
-
 static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta)
 {
     int i;
@@ -349,7 +353,7 @@ static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta
         alpha = besteval;
 
     move_alllegal(board, &moves, true);
-    brain_scoremoves(board, &moves, scores);
+    brain_scoremoves(board, &moves, scores, -1);
     brain_sortmoves(&moves, scores);
 
     for(i=0; i<moves.count; i++)
@@ -406,7 +410,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         return brain_quiesencesearch(board, alpha, beta);
 
     move_alllegal(board, &moves, false);
-    brain_scoremoves(board, &moves, scores);
+    brain_scoremoves(board, &moves, scores, rootdepth);
     brain_sortmoves(&moves, scores);
 
     if(!moves.count)
@@ -453,27 +457,28 @@ move_t brain_runsearch(board_t* board, int timems)
 {
     int i;
 
-    move_t move, safemove;
+    move_t move;
 
     ntranspos = 0;
     searchstart = clock();
     searchtime = timems - 10;
     searchcanceled = false;
+    bestknown = 0;
 
     if(book_findmove(board, &move))
         return move;
     
-    for(i=1, safemove=0;; i++)
+    for(i=1, move=0; ; i++)
     {
         brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, 16, &move);
 
         if(searchcanceled)
             break;
 
-        safemove = move;
+        bestknown = move;
     }
 
     printf("searched to depth %d with %d transpositions\n", i - 1, ntranspos);
 
-    return safemove;
+    return move;
 }

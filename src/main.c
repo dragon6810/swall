@@ -338,7 +338,6 @@ int main(int argc, char** argv)
 
     move_init();
     book_load("baron30.bin");
-    //tests_movegen();
 
     uci_main();
     

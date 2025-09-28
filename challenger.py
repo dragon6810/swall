@@ -171,7 +171,6 @@ def save_pgn(game_id, code, start_fen, moves_uci, white_name, black_name, result
     game.headers["Result"] = result_str
     game.headers["WhiteEngine"] = f"A ({a_commit})"
     game.headers["BlackEngine"] = f"B ({b_commit})"
-    # Ensure dir
     os.makedirs(PGN_DIR, exist_ok=True)
     fname = os.path.join(PGN_DIR, f"{game_id}-{code}.pgn")
     with open(fname, "w", encoding="utf-8") as f:
@@ -268,7 +267,14 @@ def main():
         log("\nNo positions file found; using startpos")
 
     # Ensure PGN dir exists
-    os.makedirs(PGN_DIR, exist_ok=True)
+    if os.path.exists(PGN_DIR):
+        for fn in os.listdir(PGN_DIR):
+            try:
+                os.remove(os.path.join(PGN_DIR, fn))
+            except Exception:
+                pass
+    else:
+        os.makedirs(PGN_DIR, exist_ok=True)
 
     a_w = b_w = d = 0
     played = 0
