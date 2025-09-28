@@ -3,9 +3,10 @@ import argparse, os, subprocess, sys, time, threading, queue, shutil
 import traceback
 
 # --- Config (hard-coded on purpose) ---
-BENCH_DIR   = ".bench"   # add to .gitignore
-GAMES       = 100         # number of games (alternating colors)
-MOVETIME_MS = 100        # fixed movetime per move
+BENCH_DIR    = ".bench"            # add to .gitignore
+POSITIONS_EP = os.path.join(BENCH_DIR, "positions.epd")
+GAMES        = 100                 # total games cap
+MOVETIME_MS  = 100                 # fixed movetime per move
 
 # ---------- Utilities ----------
 def log(msg): print(msg, flush=True)
@@ -19,7 +20,6 @@ def run(cmd, cwd=None, shell=True, check=True, desc=None):
     p = subprocess.run(cmd, cwd=cwd, shell=shell, text=True,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if p.stdout:
-        # indent output for readability
         log(p.stdout.rstrip())
     if check and p.returncode != 0:
         raise RuntimeError(f"Command failed (exit {p.returncode}) in {where}:\n{cmd}\n{p.stdout}")
@@ -50,6 +50,28 @@ def ensure_file(path, what):
     if not os.path.exists(path):
         raise FileNotFoundError(f"{what} not found: {path}")
 
+# ---------- Load positions ----------
+def load_positions(epd_path):
+    """Return list of FENs (or 'startpos'). Accepts FEN/EPD; trims to first 6 fields."""
+    if not os.path.exists(epd_path):
+        return None
+    fens = []
+    with open(epd_path, "r", encoding="utf-8", errors="ignore") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.lower() == "startpos":
+                fens.append("startpos")
+                continue
+            # Accept EPD with ops: keep first 4–6 fields, force halfmove/fullmove present
+            parts = line.split()
+            if len(parts) >= 4:
+                if len(parts) < 6:
+                    parts = (parts + ["0", "1"])[:6]
+                fens.append(" ".join(parts[:6]))
+    return fens
+
 # ---------- UCI wrapper ----------
 class Reader(threading.Thread):
     def __init__(self, proc, log_prefix):
@@ -60,8 +82,7 @@ class Reader(threading.Thread):
     def run(self):
         for line in iter(self.proc.stdout.readline, b""):
             s = line.decode(errors="replace")
-            # Uncomment to see engine chatter live:
-            # log(f"{self.log_prefix} {s.rstrip()}")
+            # log(f"{self.log_prefix} {s.rstrip()}")  # enable to see engine chatter
             self.q.put(s)
         self.q.put(None)
     def readline(self, timeout=None):
@@ -84,12 +105,14 @@ class UCIEngine:
         self.reader = Reader(self.proc, f"[{self.name}]")
         self.reader.start()
         self.send("uci"); self._expect("uciok", 10)
+        # consistency knobs if your engine supports them:
+        # self.send("setoption name UseBook value false")
+        # self.send("setoption name Seed value 123456")
         self.send("isready"); self._expect("readyok", 10)
     def stop(self):
         if self.proc and self.proc.poll() is None:
             try:
-                self.send("quit")
-                self.proc.wait(timeout=1)
+                self.send("quit"); self.proc.wait(timeout=1)
             except Exception:
                 self.proc.kill()
         log(f"[{self.name}] stopped")
@@ -102,13 +125,24 @@ class UCIEngine:
             if line and token in line: return
         raise RuntimeError(f"{self.name}: timeout waiting for {token}")
     def newgame(self):
-        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", MOVETIME_MS * 2)
-    def bestmove(self, moves_san, movetime_ms):
-        if moves_san:
-            self.send(f"position startpos moves {' '.join(moves_san)}")
+        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", max(10, MOVETIME_MS * 2 / 1000))
+    def bestmove_startpos(self, moves_uci, movetime_ms):
+        if moves_uci:
+            self.send(f"position startpos moves {' '.join(moves_uci)}")
         else:
             self.send("position startpos")
         self.send(f"go movetime {movetime_ms}")
+        return self._read_bestmove(movetime_ms)
+    def bestmove_fen(self, start_fen, moves_uci, movetime_ms):
+        if start_fen == "startpos":
+            return self.bestmove_startpos(moves_uci, movetime_ms)
+        if moves_uci:
+            self.send(f"position fen {start_fen} moves {' '.join(moves_uci)}")
+        else:
+            self.send(f"position fen {start_fen}")
+        self.send(f"go movetime {movetime_ms}")
+        return self._read_bestmove(movetime_ms)
+    def _read_bestmove(self, movetime_ms):
         deadline = time.time() + movetime_ms/1000 + 5
         best = None
         while time.time() < deadline:
@@ -121,48 +155,71 @@ class UCIEngine:
                 break
         return best
 
-# ---------- Minimal chess board (no external deps) ----------
-FILES = "abcdefgh"
-RANKS = "12345678"
-
-def is_legal_uci_move(board, move):
-    # We don’t generate moves—engines are assumed legal. We just sanity check UCI format.
+# ---------- Minimal chess adjudication ----------
+FILES = "abcdefgh"; RANKS = "12345678"
+def is_legal_uci_move(move):
     if move is None or len(move) < 4: return False
     f1, r1, f2, r2 = move[0], move[1], move[2], move[3]
     return (f1 in FILES and f2 in FILES and r1 in RANKS and r2 in RANKS)
 
-# For results/adjudication we’ll use python-chess if available; else fall back to move-limit draw.
 try:
     import chess as _pc
     HAVE_PYCHESS = True
 except Exception:
     HAVE_PYCHESS = False
 
-def play_match(engW, engB, movetime_ms, max_plies=300):
+def play_from_fen(engW, engB, start_fen, movetime_ms, max_plies=300):
+    """One game from specific FEN, W=engW, B=engB."""
+    if HAVE_PYCHESS:
+        b = _pc.Board() if start_fen == "startpos" else _pc.Board(start_fen)
+        sf = b.fen() if start_fen != "startpos" else "startpos"
+        engW.newgame(); engB.newgame()
+        while not b.is_game_over() and len(b.move_stack) < max_plies:
+            side = engW if b.turn == _pc.WHITE else engB
+            mv = side.bestmove_fen(sf, [m.uci() for m in b.move_stack], movetime_ms)
+            if not is_legal_uci_move(mv):
+                return "0-1" if b.turn == _pc.WHITE else "1-0"
+            try:
+                b.push_uci(mv)
+            except Exception:
+                return "0-1" if b.turn == _pc.WHITE else "1-0"
+        return b.result(claim_draw=True)
+    else:
+        # No python-chess: still play, but only format-check moves and draw on ply cap.
+        engW.newgame(); engB.newgame()
+        moves = []
+        for ply in range(max_plies):
+            side = engW if ply % 2 == 0 else engB
+            mv = side.bestmove_fen(start_fen, moves, movetime_ms)
+            if not is_legal_uci_move(mv):
+                return "0-1" if ply % 2 == 0 else "1-0"
+            moves.append(mv)
+        return "1/2-1/2"
+
+def play_startpos_match(engW, engB, movetime_ms, max_plies=300):
+    """Backwards-compat: startpos alternating colors."""
     if HAVE_PYCHESS:
         b = _pc.Board()
         engW.newgame(); engB.newgame()
         while not b.is_game_over() and len(b.move_stack) < max_plies:
             side = engW if b.turn == _pc.WHITE else engB
-            best = side.bestmove([m.uci() for m in b.move_stack], movetime_ms)
-            if not is_legal_uci_move(b, best):
-                # illegal/no move => side to move loses
+            mv = side.bestmove_startpos([m.uci() for m in b.move_stack], movetime_ms)
+            if not is_legal_uci_move(mv):
                 return "0-1" if b.turn == _pc.WHITE else "1-0"
             try:
-                b.push_uci(best)
+                b.push_uci(mv)
             except Exception:
                 return "0-1" if b.turn == _pc.WHITE else "1-0"
         return b.result(claim_draw=True)
     else:
-        # Fallback: no legality or end detection; just play plies and call draw.
         engW.newgame(); engB.newgame()
-        san = []
+        moves = []
         for ply in range(max_plies):
             side = engW if ply % 2 == 0 else engB
-            best = side.bestmove(san, movetime_ms)
-            if not is_legal_uci_move(None, best):
+            mv = side.bestmove_startpos(moves, movetime_ms)
+            if not is_legal_uci_move(mv):
                 return "0-1" if ply % 2 == 0 else "1-0"
-            san.append(best)
+            moves.append(mv)
         return "1/2-1/2"
 
 # ---------- Main ----------
@@ -172,7 +229,6 @@ def main():
     parser.add_argument("commit_b")
     args = parser.parse_args()
 
-    # Explicit flush banner
     log("=== Challenger starting ===")
     log(f"Repo: {os.getcwd()}")
     log(f"Commits: A={args.commit_a}  B={args.commit_b}")
@@ -196,8 +252,7 @@ def main():
         try_build(b_dir)
     except Exception as e:
         log("\n[BUILD ERROR]")
-        log(str(e))
-        log(traceback.format_exc())
+        log(str(e)); log(traceback.format_exc())
         sys.exit(2)
 
     # Ensure run/ and binary paths
@@ -220,26 +275,54 @@ def main():
         engA.start(); engB.start()
     except Exception as e:
         log("\n[UCI START ERROR]")
-        log(str(e))
-        log(traceback.format_exc())
+        log(str(e)); log(traceback.format_exc())
         sys.exit(4)
+
+    # Load positions (if present)
+    fens = load_positions(POSITIONS_EP)
+    if fens:
+        log(f"\nLoaded {len(fens)} positions from {POSITIONS_EP}")
+    else:
+        log("\nNo positions file found; using startpos")
 
     # Play games
     a_w = b_w = d = 0
+    played = 0
     try:
-        log(f"\nRunning {GAMES} games (movetime {MOVETIME_MS} ms)...\n")
-        for g in range(1, GAMES + 1):
-            if g % 2 == 1:
-                res = play_match(engA, engB, MOVETIME_MS)
+        if fens:
+            log(f"Running up to {GAMES} games from positions (movetime {MOVETIME_MS} ms)...\n")
+            for idx, fen in enumerate(fens, start=1):
+                if played >= GAMES: break
+                # A as White
+                res = play_from_fen(engA, engB, fen, MOVETIME_MS)
+                played += 1
                 if res == "1-0": a_w += 1
                 elif res == "0-1": b_w += 1
                 else: d += 1
-            else:
-                res = play_match(engB, engA, MOVETIME_MS)
+                log(f"[{idx}/{len(fens)}] Game {played}/{GAMES}: {res}   (A:{a_w} D:{d} B:{b_w})")
+
+                if played >= GAMES: break
+                # B as White
+                res = play_from_fen(engB, engA, fen, MOVETIME_MS)
+                played += 1
                 if res == "1-0": b_w += 1
                 elif res == "0-1": a_w += 1
                 else: d += 1
-            log(f"Game {g}/{GAMES}: {res}   (A:{a_w}  D:{d}  B:{b_w})")
+                log(f"[{idx}/{len(fens)}] Game {played}/{GAMES}: {res}   (A:{a_w} D:{d} B:{b_w})")
+        else:
+            log(f"Running {GAMES} games (startpos, movetime {MOVETIME_MS} ms)...\n")
+            for g in range(1, GAMES + 1):
+                if g % 2 == 1:
+                    res = play_startpos_match(engA, engB, MOVETIME_MS)
+                    if res == "1-0": a_w += 1
+                    elif res == "0-1": b_w += 1
+                    else: d += 1
+                else:
+                    res = play_startpos_match(engB, engA, MOVETIME_MS)
+                    if res == "1-0": b_w += 1
+                    elif res == "0-1": a_w += 1
+                    else: d += 1
+                log(f"Game {g}/{GAMES}: {res}   (A:{a_w}  D:{d}  B:{b_w})")
     finally:
         engA.stop(); engB.stop()
 
