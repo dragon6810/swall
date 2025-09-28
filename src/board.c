@@ -372,7 +372,7 @@ static void board_checkstalemate(board_t* board)
     if(!pval)
         return;
 
-    if(*pval >= 3)
+    if(*pval >= 2)
         board->stalemate = true;
 }
 
