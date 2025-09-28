@@ -247,11 +247,6 @@ void uci_cmd_position(const char* args)
 
     board_update(&board);
 
-    transpose_free(&board.ttable);
-    transpose_free(&board.ttableold);
-    transpose_alloc(&board.ttable, 64 * 1024);
-    transpose_alloc(&board.ttableold, 64 * 1024);
-
     while(*args && *args <= 32)
             args++;
 
