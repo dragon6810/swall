@@ -370,7 +370,7 @@ static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta
         if(eval > alpha)
             alpha = eval;
         if(alpha >= beta)
-            return eval;
+            return alpha;
     }
 
     return besteval;
@@ -385,7 +385,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     moveset_t moves;
     int16_t scores[MAX_MOVE];
     int16_t eval;
-    move_t alphamove;
+    move_t bestmove;
     mademove_t mademove;
     int ext;
 
@@ -423,6 +423,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         return eval;
     }
 
+    bestmove = 0;
     for(i=0; i<moves.count; i++)
     {
         ext = 0;
@@ -439,17 +440,20 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         if(eval > alpha)
         {
             alpha = eval;
-            alphamove = moves.moves[i];
+            bestmove = moves.moves[i];
         }
 
+        // move was so good that opponent will never let us get to this point
         if(alpha >= beta)
+        {
             return alpha;
+        }
     }
 
     if(outmove)
-        *outmove = alphamove;
+        *outmove = bestmove;
 
-    transpose_store(&board->ttable, board->hash, depth, alpha, alphamove);
+    transpose_store(&board->ttable, board->hash, depth, alpha, bestmove);
     return alpha;
 }
 
@@ -458,6 +462,8 @@ move_t brain_runsearch(board_t* board, int timems)
     int i;
 
     move_t move;
+    char str[MAX_LONGALG];
+    int score;
 
     ntranspos = 0;
     searchstart = clock();
@@ -470,7 +476,9 @@ move_t brain_runsearch(board_t* board, int timems)
     
     for(i=1, move=0; ; i++)
     {
-        brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, 16, &move);
+        score = brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, 16, &move);
+        move_tolongalg(move, str);
+        printf("depth: %d. best move: %s. score: %d.\n", i, str, score);
 
         if(searchcanceled)
             break;
