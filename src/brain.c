@@ -453,7 +453,7 @@ move_t brain_runsearch(board_t* board, int timems)
 
     ntranspos = 0;
     searchstart = clock();
-    searchtime = timems;
+    searchtime = timems - 10;
     searchcanceled = false;
 
     if(book_findmove(board, &move))

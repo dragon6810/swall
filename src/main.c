@@ -116,7 +116,7 @@ void uci_cmd_go(const char* args)
         return;
     }
 
-    times[TEAM_WHITE] = times[TEAM_BLACK] = 0;
+    times[TEAM_WHITE] = times[TEAM_BLACK] = searchtime = 0;
     while(1)
     {
         while(*args && *args <= 32)
@@ -175,15 +175,41 @@ void uci_cmd_go(const char* args)
             continue;
         }
 
+        else if(!strncmp(args, "movetime", 8))
+        {
+            args += 8;
+            while(*args && *args <= 32)
+                args++;
+
+            argend = args;
+            while(*argend && *argend >= '0' && *argend <= '9')
+                argend++;
+            
+            memcpy(arg, args, argend - args);
+            arg[argend - args] = 0;
+
+            searchtime = atoi(arg);
+            args += argend - args;
+
+            if(searchtime <= 0)
+            {
+                searchtime = 0;
+                continue;
+            }
+
+            continue;
+        }
+
         else
             break;
     }
 
-    searchtime = 100;
-    if(times[board.tomove])
-        searchtime = times[board.tomove] / 25;
-
-    printf("time: %d\n", searchtime);
+    if(!searchtime)
+    {
+        searchtime = 100;
+        if(times[board.tomove])
+            searchtime = times[board.tomove] / 25;
+    }
 
     move = brain_runsearch(&board, searchtime);
     move_tolongalg(move, str);
