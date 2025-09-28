@@ -41,10 +41,9 @@ static void move_docapture(board_t* board, move_t move, mademove_t* made)
 }
 
 // reversible
-static void move_docastle(board_t* board, move_t move)
+static void move_docastle(board_t* board, move_t move, team_e team)
 {
     int src, dst;
-    team_e team;
     int rooksrc, rookdst;
     bitboard_t rookmask;
     square_t temp;
@@ -54,7 +53,6 @@ static void move_docastle(board_t* board, move_t move)
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-    team = board->tomove;
 
     // queenside
     if(dst < src)
@@ -83,23 +81,25 @@ static void move_updatecastlerights(board_t* board, move_t move)
     int src, dst;
     team_e team;
     piece_e piece, capture;
-    int enemyrank;
+    int ourrank, enemyrank;
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     team = board->tomove;
     piece = board->sqrs[src] & SQUARE_MASK_TYPE;
     capture = board->sqrs[dst] & SQUARE_MASK_TYPE;
+    
+    enemyrank = team == TEAM_WHITE ? BOARD_LEN - 1 : 0;
+    ourrank = team == TEAM_BLACK ? BOARD_LEN - 1 : 0;
 
     if(piece == PIECE_KING)
         board->kcastle[team] = board->qcastle[team] = false;
 
-    else if(piece == PIECE_ROOK && src % BOARD_LEN == 0)
+    else if(piece == PIECE_ROOK && src % BOARD_LEN == 0 && src / BOARD_LEN == ourrank)
         board->qcastle[team] = false;
-    else if(piece == PIECE_ROOK && src % BOARD_LEN == BOARD_LEN - 1)
+    else if(piece == PIECE_ROOK && src % BOARD_LEN == BOARD_LEN - 1 && src / BOARD_LEN == ourrank)
         board->kcastle[team] = false;
 
-    enemyrank = team == TEAM_WHITE ? BOARD_LEN - 1 : 0;
     if(capture != PIECE_ROOK || dst / BOARD_LEN != enemyrank)
         return;
 
@@ -221,7 +221,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     move_doenpas(board, move);
     move_updateenpas(board, move, outmove);
     move_updatecastlerights(board, move);
-    move_docastle(board, move);
+    move_docastle(board, move, team);
     move_docapture(board, move, outmove);
 
     switch(type)
@@ -291,7 +291,7 @@ void move_unmake(board_t* board, const mademove_t* move)
     team = !board->tomove;
     ptype = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
-    move_docastle(board, move->move);
+    move_docastle(board, move->move, team);
 
     switch(type)
     {
