@@ -1,165 +1,144 @@
 #!/usr/bin/env python3
-import argparse
-import os
-import sys
-import tempfile
-import subprocess
-import time
-import threading
-import queue
+import argparse, os, subprocess, sys, time, threading, queue, shutil
 import chess
 
-# --- Nonblocking reader for engine stdout ---
+BENCH_DIR = ".bench"   # add this to your .gitignore
+GAMES = 10
+MOVETIME_MS = 200      # fixed time per move
+
+# ------------ small helpers ------------
+def run(cmd, cwd=None, shell=True, check=True):
+    p = subprocess.run(cmd, cwd=cwd, shell=shell, text=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if check and p.returncode != 0:
+        raise RuntimeError(f"Command failed in {cwd or os.getcwd()}:\n$ {cmd}\n{p.stdout}")
+    return p.stdout
+
+def clone_checkout(repo_root, commit, dest):
+    run(f"git clone --quiet {repo_root} {dest}")
+    run(f"git -c advice.detachedHead=false checkout --quiet {commit}", cwd=dest)
+
+def try_build(repo_dir):
+    # Try a few common variants so it "just works"
+    tried = []
+    for cmd in ("./cleanbuild.sh",
+                "bash ./cleanbuild.sh",
+                "bash scripts/cleanbuild.sh"):
+        try:
+            tried.append(cmd)
+            run(cmd, cwd=repo_dir)
+            return
+        except Exception as e:
+            last_err = e
+    raise RuntimeError(
+        "Could not build.\n"
+        f"Tried: {', '.join(tried)}\n"
+        "If your build script isn’t tracked by git, commit it or change the script to call the right command."
+    ) from last_err
+
+# ------------ UCI engine wrapper ------------
 class Reader(threading.Thread):
     def __init__(self, proc):
         super().__init__(daemon=True)
         self.proc = proc
         self.q = queue.Queue()
-
     def run(self):
         for line in iter(self.proc.stdout.readline, b""):
             self.q.put(line.decode(errors="replace"))
         self.q.put(None)
-
     def readline(self, timeout=None):
-        try:
-            return self.q.get(timeout=timeout)
-        except queue.Empty:
-            return None
+        try: return self.q.get(timeout=timeout)
+        except queue.Empty: return None
 
-# --- UCI engine wrapper ---
 class UCIEngine:
-    def __init__(self, exe_path, name):
-        self.exe_path = exe_path
+    def __init__(self, exe_argv, name, workdir):
+        self.exe_argv = exe_argv
         self.name = name
+        self.workdir = workdir
         self.proc = None
         self.reader = None
-
     def start(self):
         self.proc = subprocess.Popen(
-            self.exe_path,
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            cwd="run", bufsize=0
+            self.exe_argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, cwd=self.workdir, bufsize=0
         )
-        self.reader = Reader(self.proc)
-        self.reader.start()
-        self.send("uci")
-        self._expect("uciok")
-
-        self.send("isready")
-        self._expect("readyok")
-
+        self.reader = Reader(self.proc); self.reader.start()
+        self.send("uci"); self._expect("uciok", 10)
+        self.send("isready"); self._expect("readyok", 10)
     def stop(self):
         if self.proc and self.proc.poll() is None:
             try:
-                self.send("quit")
-                self.proc.wait(timeout=1)
+                self.send("quit"); self.proc.wait(timeout=1)
             except Exception:
                 self.proc.kill()
-
     def send(self, line):
-        self.proc.stdin.write((line + "\n").encode())
-        self.proc.stdin.flush()
-
-    def _expect(self, token, timeout=10.0):
+        self.proc.stdin.write((line + "\n").encode()); self.proc.stdin.flush()
+    def _expect(self, token, timeout):
         deadline = time.time() + timeout
         while time.time() < deadline:
             line = self.reader.readline(timeout=0.1)
-            if line and token in line:
-                return
+            if line and token in line: return
         raise RuntimeError(f"{self.name}: timeout waiting for {token}")
-
-    def bestmove(self, board, movetime_ms=200):
+    def newgame(self):
+        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", 10)
+    def bestmove(self, board, movetime_ms):
         if board.move_stack:
             moves = " ".join(m.uci() for m in board.move_stack)
             self.send(f"position startpos moves {moves}")
         else:
             self.send("position startpos")
         self.send(f"go movetime {movetime_ms}")
-
-        while True:
-            line = self.reader.readline(timeout=2.0)
-            if not line:
-                break
+        deadline = time.time() + movetime_ms/1000 + 5
+        best = None
+        while time.time() < deadline:
+            line = self.reader.readline(timeout=0.2)
+            if line is None: break
             if line.startswith("bestmove"):
                 parts = line.strip().split()
-                if len(parts) >= 2:
-                    try:
-                        return chess.Move.from_uci(parts[1])
-                    except ValueError:
-                        return None
-        return None
+                if len(parts) >= 2: best = parts[1]
+                break
+        try:
+            return chess.Move.from_uci(best) if best else None
+        except ValueError:
+            return None
 
-    def newgame(self):
-        self.send("ucinewgame")
-        self.send("isready")
-        self._expect("readyok")
-
-# --- Helpers ---
-def run(cmd, cwd=None):
-    subprocess.run(cmd, cwd=cwd, shell=True, check=True)
-
-def clone_checkout(commit, dest):
-    run(f"git clone . {dest}")
-    run(f"git checkout {commit}", cwd=dest)
-    run("./cleanbuild.sh", cwd=dest)
-
-def play_game(engineA, engineB, movetime=200, max_plies=200):
+# ------------ match logic ------------
+def play_one(engine_w, engine_b, movetime_ms, max_plies=300):
     board = chess.Board()
-    engineA.newgame()
-    engineB.newgame()
+    engine_w.newgame(); engine_b.newgame()
     while not board.is_game_over() and len(board.move_stack) < max_plies:
-        engine = engineA if board.turn == chess.WHITE else engineB
-        move = engine.bestmove(board, movetime)
-        if move is None or move not in board.legal_moves:
+        eng = engine_w if board.turn == chess.WHITE else engine_b
+        mv = eng.bestmove(board, movetime_ms)
+        if mv is None or mv not in board.legal_moves:
             return "0-1" if board.turn == chess.WHITE else "1-0"
-        board.push(move)
+        board.push(mv)
     return board.result(claim_draw=True)
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("commit_a")
-    ap.add_argument("commit_b")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description="Bench two commits of this repo’s UCI engine.")
+    parser.add_argument("commit_a")
+    parser.add_argument("commit_b")
+    args = parser.parse_args()
 
-    with tempfile.TemporaryDirectory() as tmp:
-        dirA = os.path.join(tmp, "A")
-        dirB = os.path.join(tmp, "B")
-        print(f"Building A ({args.commit_a})...")
-        clone_checkout(args.commit_a, dirA)
-        print(f"Building B ({args.commit_b})...")
-        clone_checkout(args.commit_b, dirB)
+    repo_root = os.getcwd()
+    os.makedirs(BENCH_DIR, exist_ok=True)
 
-        exeA = ["../bin/swall"]
-        exeB = ["../bin/swall"]
+    a_dir = os.path.join(BENCH_DIR, "A")
+    b_dir = os.path.join(BENCH_DIR, "B")
+    if os.path.exists(a_dir): shutil.rmtree(a_dir)
+    if os.path.exists(b_dir): shutil.rmtree(b_dir)
 
-        engA = UCIEngine(exeA, "A")
-        engB = UCIEngine(exeB, "B")
-        engA.start()
-        engB.start()
+    print(f"Building A ({args.commit_a})...")
+    clone_checkout(repo_root, args.commit_a, a_dir)
+    try_build(a_dir)
 
-        try:
-            a_wins = b_wins = draws = 0
-            games = 10
-            for g in range(games):
-                # alternate colors
-                if g % 2 == 0:
-                    res = play_game(engA, engB)
-                    if res == "1-0": a_wins += 1
-                    elif res == "0-1": b_wins += 1
-                    else: draws += 1
-                else:
-                    res = play_game(engB, engA)
-                    if res == "1-0": b_wins += 1
-                    elif res == "0-1": a_wins += 1
-                    else: draws += 1
-                print(f"Game {g+1}: {res}")
-        finally:
-            engA.stop()
-            engB.stop()
+    print(f"Building B ({args.commit_b})...")
+    clone_checkout(repo_root, args.commit_b, b_dir)
+    try_build(b_dir)
 
-        print("\n=== Results ===")
-        print(f"A wins: {a_wins}, Draws: {draws}, B wins: {b_wins}")
+    # ensure run dirs exist; many repos have it already, but be forgiving
+    os.makedirs(os.path.join(a_dir, "run"), exist_ok=True)
+    os.makedirs(os.path.join(b_dir, "run"), exist_ok=True)
 
-if __name__ == "__main__":
-    main()
+    # verify engine binaries exist after build
+    binA = os.path.join(a_dir, "bin", "swall")
