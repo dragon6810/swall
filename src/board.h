@@ -84,7 +84,7 @@ typedef struct board_s
     bool kcastle[TEAM_COUNT]; // starts at true, false if the team's kingside rook moves
     bool qcastle[TEAM_COUNT]; // starts at true, false if the team's queenside rook moves
 
-    ttable_t ttable, ttableold;
+    ttable_t ttable;
 } board_t;
 
 void board_findpieces(board_t* board);

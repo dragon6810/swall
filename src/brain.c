@@ -252,7 +252,7 @@ static int16_t brain_moveguess(board_t* board, move_t mv)
     piece_e psrc, pdst;
     transpos_t *transpos;
 
-    transpos = transpose_find(&board->ttableold, board->hash, 255);
+    transpos = transpose_find(&board->ttable, board->hash, 0, true);
     if(transpos && transpos->bestmove == mv)
         return 9950; // a little less than mate
 
@@ -395,7 +395,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     if(board->stalemate)
         return 0;
 
-    transpos = transpose_find(&board->ttable, board->hash, depth);
+    transpos = transpose_find(&board->ttable, board->hash, depth, false);
     if(transpos)
     {
         ntranspos++;
@@ -446,7 +446,6 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         *outmove = alphamove;
 
     transpose_store(&board->ttable, board->hash, depth, alpha, alphamove);
-    transpose_store(&board->ttableold, board->hash, depth, alpha, alphamove);
     return alpha;
 }
 
@@ -463,11 +462,9 @@ move_t brain_runsearch(board_t* board, int timems)
 
     if(book_findmove(board, &move))
         return move;
-
-    // transpose_clear(&board->ttable);
+    
     for(i=1, safemove=0;; i++)
     {
-        transpose_clear(&board->ttable);
         brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, 16, &move);
 
         if(searchcanceled)

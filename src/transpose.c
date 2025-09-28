@@ -26,7 +26,7 @@ void transpose_clear(ttable_t* table)
     memset(table->data, 0, table->size * sizeof(transpos_t));
 }
 
-transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth)
+transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth, bool nostrict)
 {
     uint64_t idx;
 
@@ -36,7 +36,7 @@ transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth)
     idx = hash % table->size;
     if(table->data[idx].hash != hash)
         return NULL;
-    if(depth != 255 && table->data[idx].depth < depth)
+    if(!nostrict && table->data[idx].depth < depth)
         return NULL;
 
     return &table->data[idx];

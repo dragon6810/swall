@@ -1,6 +1,7 @@
 #ifndef _TRANSPOSE_H
 #define _TRANSPOSE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef uint16_t move_t;
@@ -22,8 +23,8 @@ typedef struct ttable_s
 void transpose_alloc(ttable_t* table, uint64_t sizekb);
 void transpose_free(ttable_t* table);
 void transpose_clear(ttable_t* table);
-// if depth is 255, ignore depth
-transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth);
+// if nostrict is set, the result will often be incorrect, but good first guess for move ordering
+transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth, bool nostrict);
 void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval, move_t move);
 
 #endif
