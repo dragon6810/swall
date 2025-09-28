@@ -113,9 +113,9 @@ static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team
     srcmask = (uint64_t) 1 << src;
     dstmask = (uint64_t) 1 << dst;
 
-    if(board->isthreat)
-        return (dstmask & board->threat) != 0;
-
+    if(board->isthreat && !(dstmask & board->threat))
+        return false;
+    
     for(i=0, curpin=board->pins; i<board->npins; i++, curpin++)
     {
         // stepping out of a pin we were in.
@@ -132,7 +132,6 @@ static void move_addiflegal(board_t* board, moveset_t* moves, move_t move, piece
         moves->moves[moves->count++] = move;
 }
 
-// if bits is not null, it will ignore set and fill out the bitboard
 static void move_sweep
 (
     moveset_t* set, board_t* board, 
@@ -317,7 +316,7 @@ static void move_sweepthreat(board_t* board, team_e team, dir_e dir, uint8_t src
     line = 0;
 
     max = sweeptable[src][dir];
-    for(i=0, idx=src; i<max; i++, idx+=diroffs[dir])
+    for(i=0, idx=src; i<=max; i++, idx+=diroffs[dir])
     {
         imask = (uint64_t) 1 << idx;
         line |= imask;
@@ -335,7 +334,7 @@ static void move_sweepthreat(board_t* board, team_e team, dir_e dir, uint8_t src
     }
 
     // edge of the board and no king
-    if(i >= max)
+    if(i > max)
         return;
 
     if(board->isthreat)
@@ -383,7 +382,7 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
     nblocks = 0;
 
     max = sweeptable[src][dir];
-    for(i=0, idx=src; i<max; i++, idx+=diroffs[dir])
+    for(i=0, idx=src; i<=max; i++, idx+=diroffs[dir])
     {
         imask = (uint64_t) 1 << idx;
         line |= imask;
@@ -416,8 +415,12 @@ static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
         nblocks++;
     }
 
+    if(!nblocks)
+        return;
+    
+
     // edge of the board and no king
-    if(i >= max)
+    if(i > max)
         return;
 
     if(isenpas)
