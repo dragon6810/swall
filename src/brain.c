@@ -215,13 +215,18 @@ static int16_t brain_eval(board_t* board)
             p = board->sqrs[board->ptable[t][i]] & SQUARE_MASK_TYPE;
             material[t] += pscore[p];
         }
+    }
 
-        endgameweight = 1 - ((float) material[t] / (float) startmaterial);
+    endgameweight = 1 - ((float) (material[TEAM_WHITE] + material[TEAM_BLACK]) / (float) (startmaterial * 2));
 
+    for(t=0; t<TEAM_COUNT; t++)
+    {
         for(i=0; i<board->npiece[t]; i++)
         {
             r = board->ptable[t][i] / BOARD_LEN;
             f = board->ptable[t][i] % BOARD_LEN;
+            p = board->sqrs[board->ptable[t][i]] & SQUARE_MASK_TYPE;
+
             if(t == TEAM_BLACK)
                 r = BOARD_LEN - 1 - r;
 
