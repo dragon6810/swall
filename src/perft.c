@@ -18,7 +18,7 @@ static bool perft_moveorder(move_t moves[2])
     return strcmp(strs[0], strs[1]) > 0;
 }
 
-static void perft_order(moveset_t* moves, int counts[MAX_MOVE])
+static void perft_order(moveset_t* moves)
 {
     int i;
 
@@ -37,10 +37,6 @@ static void perft_order(moveset_t* moves, int counts[MAX_MOVE])
                 moves->moves[i] ^= moves->moves[i-1];
                 moves->moves[i-1] ^= moves->moves[i];
                 moves->moves[i] ^= moves->moves[i-1];
-
-                counts[i] ^= counts[i-1];
-                counts[i-1] ^= counts[i];
-                counts[i] ^= counts[i-1];
             }
         }
     }
@@ -52,7 +48,7 @@ int perft_r(board_t* board, int depthfromroot, int depth)
     int i;
 
     moveset_t moves;
-    int counts[MAX_MOVE], total;
+    int count, total;
     mademove_t made;
     char str[MAX_LONGALG];
 
@@ -60,22 +56,21 @@ int perft_r(board_t* board, int depthfromroot, int depth)
         return 1;
 
     move_alllegal(board, &moves, false);
+    if(!depthfromroot)
+        perft_order(&moves);
+
     for(i=0, total=0; i<moves.count; i++)
     {
         move_make(board, moves.moves[i], &made);
         move_tolongalg(moves.moves[i], str);
-        total += counts[i] = perft_r(board, depthfromroot + 1, depth - 1);
+        total += count = perft_r(board, depthfromroot + 1, depth - 1);
         move_unmake(board, &made);
-    }
 
-    if(depthfromroot)
-        return total;
+        if(depthfromroot)
+            continue;
 
-    perft_order(&moves, counts);
-    for(i=0; i<moves.count; i++)
-    {
         move_tolongalg(moves.moves[i], str);
-        printf("%s: %d\n", str, counts[i]);
+        printf("%s: %d\n", str, count);
     }
 
     return total;

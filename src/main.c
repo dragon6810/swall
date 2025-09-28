@@ -147,11 +147,7 @@ void uci_cmd_position(const char* args)
         board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     }
 
-    board_findpieces(&board);
-    move_findattacks(&board);
-    move_findpins(&board);
-    board_findcheck(&board);
-    board.hash = zobrist_hash(&board);
+    board_update(&board);
 
     transpose_alloc(&board.ttable, 64 * 1024);
     transpose_alloc(&board.ttableold, 64 * 1024);
@@ -177,9 +173,7 @@ void uci_cmd_position(const char* args)
 
 void uci_cmd_isready(void)
 {
-    board_findpieces(&board);
-    move_findattacks(&board);
-    move_findpins(&board);
+    board_update(&board);
 
     printf("readyok\n");
 }
@@ -197,11 +191,7 @@ void uci_main(void)
     char *c;
 
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    board_findpieces(&board);
-    move_findattacks(&board);
-    move_findpins(&board);
-    board_findcheck(&board);
-    board.hash = zobrist_hash(&board);
+    board_update(&board);
     transpose_alloc(&board.ttable, 64 * 1024);
     transpose_alloc(&board.ttableold, 64 * 1024);
 

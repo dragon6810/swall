@@ -8,6 +8,8 @@
 #include <string.h>
 #include <wchar.h>
 
+#include "move.h"
+
 void board_findpieces(board_t* board)
 {
     int sqr;
@@ -27,7 +29,7 @@ void board_findpieces(board_t* board)
             
         if(board->npiece[t] >= PIECE_MAX)
         {
-            printf("board_findpieces: max pieces reached!\n");
+            printf("board_findpieces: max pieces reached for team %s!\n", t ? "black" : "white");
             board_print(board);
             exit(1);
         }
@@ -352,4 +354,14 @@ badfen:
     printf("bad fen \"%s\".\n", fen);
 
     return -1;
+}
+
+void board_update(board_t* board)
+{
+    board_findpieces(board);
+    move_findattacks(board);
+    move_findpins(board);
+    move_findthreats(board);
+    board_findcheck(board);
+    board->hash = zobrist_hash(board);
 }

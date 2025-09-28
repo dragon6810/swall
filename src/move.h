@@ -3,6 +3,8 @@
 
 #include "board.h"
 
+#define PAWN_OFFS(team) ((team) == TEAM_WHITE ? diroffs[DIR_N] : diroffs[DIR_S])
+
 #define MAX_LONGALG 6
 
 static const int diroffs[DIR_COUNT] = 
@@ -56,8 +58,12 @@ typedef struct mademove_s
     uint8_t npiece[TEAM_COUNT];
     uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     bitboard_t attacks[TEAM_COUNT][PIECE_COUNT]; // PIECE_NONE is all pieces
-    uint8_t npins[TEAM_COUNT];
-    pinline_t pins[TEAM_COUNT][PIECE_MAX];
+    uint8_t npins;
+    bitboard_t pins[PIECE_MAX];
+    bool dblcheck;
+    bool isthreat;
+    bitboard_t threat;
+    bool isenpaspin;
     bool check[TEAM_COUNT];
 } mademove_t;
 
@@ -65,8 +71,8 @@ void move_tolongalg(move_t move, char str[MAX_LONGALG]);
 void move_make(board_t* board, move_t move, mademove_t* outmove);
 void move_unmake(board_t* board, const mademove_t* move);
 void move_findattacks(board_t* board);
-// doesn't clear existing pins
 void move_findpins(board_t* board);
+void move_findthreats(board_t* board);
 // moves can be NULL
 void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly);
 // every legal move for every piece of whoever's turn it is

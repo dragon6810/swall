@@ -76,20 +76,12 @@ static int move_knightoffs(int idx, int src)
     return r * BOARD_LEN + f;
 }
 
-static inline bool move_sqrinpin(pinline_t* pin, uint8_t sqr)
-{
-    bitboard_t sqrmask;
-
-    sqrmask = (uint64_t) 1 << sqr;
-    return (sqrmask & pin->bits) != 0;
-}
-
 static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team)
 {
     int i;
-    pinline_t *curpin;
+    bitboard_t *curpin;
 
-    bitboard_t mask;
+    bitboard_t srcmask, dstmask, mask;
     uint8_t src, dst, type;
 
     src = move & MOVEBITS_SRC_MASK;
@@ -118,18 +110,16 @@ static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team
         return !(board->attacks[!team][PIECE_NONE] & mask);
     }
 
-    for(i=0, curpin=board->pins[!team]; i<board->npins[!team]; i++, curpin++)
+    srcmask = (uint64_t) 1 << src;
+    dstmask = (uint64_t) 1 << dst;
+
+    if(board->isthreat)
+        return (dstmask & board->threat) != 0;
+
+    for(i=0, curpin=board->pins; i<board->npins; i++, curpin++)
     {
-        // we're capturing the source, so don't worry about it.
-        if(dst == curpin->start)
-            continue;
-
-        // leaving an open pin open.
-        if(!curpin->nblocks && !move_sqrinpin(curpin, dst))
-            return false;
-
         // stepping out of a pin we were in.
-        if(curpin->nblocks && move_sqrinpin(curpin, src) && !move_sqrinpin(curpin, dst))
+        if((*curpin & srcmask) && !(*curpin & dstmask))
             return false;
     }
 
@@ -192,8 +182,11 @@ static void move_sweepatk(board_t* board, piece_e ptype, uint8_t src, dir_e dir,
         board->attacks[team][ptype] |= mask;
         board->attacks[team][PIECE_NONE] |= mask;
 
-        if((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & mask
-        && !(board->pboards[!team][PIECE_KING] & mask)) // should "go through" enemy king so they cant just backstep
+        // dont stop at king, the king shouldnt be able to just step back
+        if(board->pboards[!team][PIECE_KING] & mask)
+            continue;
+
+        if((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & mask)
             break;
     }
 }
@@ -312,62 +305,142 @@ void move_findattacks(board_t* board)
     }
 }
 
-static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
+static void move_sweepthreat(board_t* board, team_e team, dir_e dir, uint8_t src)
 {
     int i;
 
     int idx;
     int max;
-    pinline_t line;
-
+    bitboard_t line;
     bitboard_t imask;
 
-    memset(&line, 0, sizeof(pinline_t));
+    line = 0;
 
     max = sweeptable[src][dir];
-    for(i=0, idx=src+diroffs[dir], line.nblocks=0; i<max; i++, idx+=diroffs[dir])
+    for(i=0, idx=src; i<max; i++, idx+=diroffs[dir])
     {
         imask = (uint64_t) 1 << idx;
-        line.bits |= imask;
+        line |= imask;
+
+        if(!i)
+            continue;
 
         if(!((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & imask))
             continue;
 
-        // hit a friendly! en passant might mess this up.
-        if(board->pboards[team][PIECE_NONE] & imask)
-            return;
-
-        // enemy king, end of pin.
-        if(board->pboards[!team][PIECE_KING] & imask)
+        if(board->pboards[board->tomove][PIECE_KING] & imask)
             break;
 
-        if(line.nblocks)
-            return; // two enemies before the king
-        line.nblocks++;
+        return;
     }
 
     // edge of the board and no king
     if(i >= max)
         return;
 
-    if(board->npins[team] >= PIECE_MAX)
+    if(board->isthreat)
+    {
+        board->dblcheck = true;
+        return;
+    }
+
+    board->isthreat = true;
+    board->threat = line;
+}
+
+static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
+{
+    int i;
+
+    int idx;
+    int max;
+    bitboard_t line;
+    int nblocks;
+    int dblpushed;
+    bitboard_t enpasatkmask;
+    bool maybenepas;
+    bool isenpas;
+
+    bitboard_t imask;
+
+    dblpushed = -1;
+    enpasatkmask = 0;
+    if(board->enpas != 0xFF)
+    {
+        dblpushed = board->enpas + PAWN_OFFS(team);
+        if(dblpushed % BOARD_LEN)
+            enpasatkmask |= (uint64_t) 1 << (dblpushed - 1);
+        if(dblpushed % BOARD_LEN != BOARD_LEN - 1)
+            enpasatkmask |= (uint64_t) 1 << (dblpushed + 1);
+        enpasatkmask &= board->pboards[!team][PIECE_PAWN];
+    }
+
+    // 1 bit set, so there is exactly one pawn attacking the double pushed pawn
+    maybenepas = enpasatkmask && !(enpasatkmask & (enpasatkmask - 1));
+    isenpas = false;
+
+    line = 0;
+    nblocks = 0;
+
+    max = sweeptable[src][dir];
+    for(i=0, idx=src; i<max; i++, idx+=diroffs[dir])
+    {
+        imask = (uint64_t) 1 << idx;
+        line |= imask;
+
+        if(!i)
+            continue;
+
+        if(!((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & imask))
+            continue;
+
+        // hit a friendly!
+        if(board->pboards[team][PIECE_NONE] & imask)
+        {
+            // this is the double pushed pawn, and it can be en passanted
+            if(idx == dblpushed && maybenepas)
+            {
+                isenpas = true;
+                continue;
+            }
+            
+            return;
+        }
+
+        // enemy king, end of pin.
+        if(board->pboards[!team][PIECE_KING] & imask)
+            break;
+
+        if(nblocks)
+            return; // two enemies before the king
+        nblocks++;
+    }
+
+    // edge of the board and no king
+    if(i >= max)
+        return;
+
+    if(isenpas)
+    {
+        board->isenpaspin = true;
+        return;
+    }
+
+    if(board->npins >= PIECE_MAX)
     {
         printf("move_sweeppin: max pins reached! max is %d.\n", PIECE_MAX);
         exit(1);
     }
 
-    line.start = src;
-    line.end = idx;
-    board->pins[team][board->npins[team]++] = line;
+    board->pins[board->npins++] = line;
 }
 
-static void move_pawnpin(board_t* board, team_e team, uint8_t src)
+static void move_pawnthreat(board_t* board, team_e team, uint8_t src)
 {
     int i;
 
     int dst;
     bitboard_t dstmask;
-    pinline_t *line;
     dir_e dirs[2];
 
     if(team == TEAM_WHITE)
@@ -391,29 +464,25 @@ static void move_pawnpin(board_t* board, team_e team, uint8_t src)
         if(!(dstmask & board->pboards[!team][PIECE_KING]))
             continue;
 
-        if(board->npins[team] >= PIECE_MAX)
+        if(board->isthreat)
         {
-            printf("move_pawnpin: max pins reached! max is %d.\n", PIECE_MAX);
-            exit(1);
+            board->dblcheck = true;
+            return;
         }
 
-        line = &board->pins[team][board->npins[team]++];
-        line->bits = dstmask;
-        line->end = dst;
-        line->start = src;
-        line->nblocks = 0;
+        board->isthreat = true;
+        board->threat = (uint64_t) 1 << src;
 
         break;
     }
 }
 
-static void move_knightpin(board_t* board, team_e team, uint8_t src)
+static void move_knightthreat(board_t* board, team_e team, uint8_t src)
 {
     int i;
 
     int dst;
     bitboard_t dstmask;
-    pinline_t *line;
 
     for(i=0; i<8; i++)
     {
@@ -425,17 +494,14 @@ static void move_knightpin(board_t* board, team_e team, uint8_t src)
         if(!(dstmask & board->pboards[!team][PIECE_KING]))
             continue;
 
-        if(board->npins[team] >= PIECE_MAX)
+        if(board->isthreat)
         {
-            printf("move_knightpin: max pins reached! max is %d.\n", PIECE_MAX);
-            exit(1);
+            board->dblcheck = true;
+            return;
         }
 
-        line = &board->pins[team][board->npins[team]++];
-        line->bits = dstmask;
-        line->end = dst;
-        line->start = src;
-        line->nblocks = 0;
+        board->isthreat = true;
+        board->threat = (uint64_t) 1 << src;
 
         break;
     }
@@ -443,32 +509,55 @@ static void move_knightpin(board_t* board, team_e team, uint8_t src)
 
 void move_findpins(board_t* board)
 {
-    int i, j;
+    int i;
     dir_e dir;
 
     bitboard_t pmask;
 
-    for(i=0; i<TEAM_COUNT; i++)
-    {
-        board->npins[i] = 0;
-        for(j=0; j<board->npiece[i]; j++)
+    board->isenpaspin = false;
+
+        board->npins = 0;
+        for(i=0; i<board->npiece[!board->tomove]; i++)
         {
-            pmask = (uint64_t) 1 << board->ptable[i][j];
+            pmask = (uint64_t) 1 << board->ptable[!board->tomove][i];
 
-            if(!(board->pboards[i][PIECE_NONE] & pmask))
-                continue;
-
-            if(board->pboards[i][PIECE_QUEEN] & pmask)
-                for(dir=0; dir<DIR_COUNT; dir++) move_sweeppin(board, i, dir, board->ptable[i][j]);
-            else if(board->pboards[i][PIECE_ROOK] & pmask)
-                for(dir=0; dir<DIR_NE; dir++) move_sweeppin(board, i, dir, board->ptable[i][j]);
-            else if(board->pboards[i][PIECE_BISHOP] & pmask)
-                for(dir=DIR_NE; dir<DIR_COUNT; dir++) move_sweeppin(board, i, dir, board->ptable[i][j]);
-            else if(board->pboards[i][PIECE_KNIGHT] & pmask)
-                move_knightpin(board, i, board->ptable[i][j]);
-            else if(board->pboards[i][PIECE_PAWN] & pmask)
-                move_pawnpin(board, i, board->ptable[i][j]);
+            if(board->pboards[!board->tomove][PIECE_QUEEN] & pmask)
+                for(dir=0; dir<DIR_COUNT; dir++) move_sweeppin(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
+            else if(board->pboards[!board->tomove][PIECE_ROOK] & pmask)
+                for(dir=0; dir<DIR_NE; dir++) move_sweeppin(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
+            else if(board->pboards[!board->tomove][PIECE_BISHOP] & pmask)
+                for(dir=DIR_NE; dir<DIR_COUNT; dir++) move_sweeppin(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
         }
+}
+
+void move_findthreats(board_t* board)
+{
+    int i;
+    dir_e dir;
+
+    bitboard_t pmask;
+
+    board->dblcheck = false;
+    board->isthreat = false;
+    board->threat = 0;
+
+    if(!(board->attacks[!board->tomove][PIECE_NONE] & board->pboards[board->tomove][PIECE_KING]))
+        return;
+
+    for(i=0; i<board->npiece[!board->tomove]; i++)
+    {
+        pmask = (uint64_t) 1 << board->ptable[!board->tomove][i];
+
+        if(board->pboards[!board->tomove][PIECE_QUEEN] & pmask)
+            for(dir=0; dir<DIR_COUNT; dir++) move_sweepthreat(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
+        else if(board->pboards[!board->tomove][PIECE_ROOK] & pmask)
+            for(dir=0; dir<DIR_NE; dir++) move_sweepthreat(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
+        else if(board->pboards[!board->tomove][PIECE_BISHOP] & pmask)
+            for(dir=DIR_NE; dir<DIR_COUNT; dir++) move_sweepthreat(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
+        else if(board->pboards[!board->tomove][PIECE_KNIGHT] & pmask)
+            move_knightthreat(board, !board->tomove, board->ptable[!board->tomove][i]);
+        else if(board->pboards[!board->tomove][PIECE_PAWN] & pmask)
+            move_pawnthreat(board, !board->tomove, board->ptable[!board->tomove][i]);
     }
 }
 
@@ -541,7 +630,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
             continue;
         dstmask = (uint64_t) 1 << dst;
 
-        if(board->enpas == dst)
+        if(board->enpas == dst && !board->isenpaspin)
         {
             move = src;
             move |= dst << MOVEBITS_DST_BITS;
@@ -666,6 +755,9 @@ static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e 
 
 void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
 {
+    if((board->sqrs[src] & SQUARE_MASK_TYPE) != PIECE_KING && board->dblcheck)
+        return;
+
     switch(board->sqrs[src] & SQUARE_MASK_TYPE)
     {
     case PIECE_KING:
