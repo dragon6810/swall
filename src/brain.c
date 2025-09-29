@@ -254,7 +254,7 @@ move_t bestknown;
 int nkillers[MAX_DEPTH] = {};
 move_t killers[MAX_DEPTH][MAX_KILLER] = {};
 
-static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
+static int16_t brain_moveguess(board_t* board, move_t mv, int plies, int depth)
 {
     int i;
     
@@ -272,9 +272,9 @@ static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
         return 9950; // a little less than mate
 
     // killers
-    if(plies >= 0)
-        for(i=0; i<nkillers[plies]; i++)
-            if(killers[plies][i] == mv)
+    if(depth >= 0)
+        for(i=0; i<nkillers[depth]; i++)
+            if(killers[depth][i] == mv)
                 return 9940;
 
     src = (mv & MOVEBITS_SRC_MASK) >> MOVEBITS_SRC_BITS;
@@ -301,12 +301,12 @@ static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
     return score;
 }
 
-static void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MOVE], int plies)
+static void brain_scoremoves(board_t* board, moveset_t* moves, int16_t outscores[MAX_MOVE], int plies, int depth)
 {
     int i;
 
     for(i=0; i<moves->count; i++)
-        outscores[i] = brain_moveguess(board, moves->moves[i], plies);
+        outscores[i] = brain_moveguess(board, moves->moves[i], plies, depth);
 }
 
 static void brain_sortmoves(moveset_t* moves, int16_t* scores)
@@ -367,7 +367,7 @@ static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta
         alpha = besteval;
 
     move_alllegal(board, &moves, true);
-    brain_scoremoves(board, &moves, scores, -1);
+    brain_scoremoves(board, &moves, scores, -1, -1);
     brain_sortmoves(&moves, scores);
 
     for(i=0; i<moves.count; i++)
@@ -463,7 +463,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         return brain_quiesencesearch(board, alpha, beta);
 
     move_alllegal(board, &moves, false);
-    brain_scoremoves(board, &moves, scores, rootdepth);
+    brain_scoremoves(board, &moves, scores, rootdepth, depth);
     brain_sortmoves(&moves, scores);
 
     if(!moves.count)
@@ -487,7 +487,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         ext = brain_calcext(board, moves.moves[i], next);
 
         needsfullsearch = true;
-        if(i > 2 && depth - 1 > 2 && !ext)
+        if(i > 2 && depth - 1 > 2 && !ext && !capture)
         {
             eval = -brain_search(board, -beta, -alpha, depth - 2, rootdepth + 1, next - ext, NULL);
             needsfullsearch = eval > alpha;
@@ -503,8 +503,8 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
 
         if(eval > alpha)
         {
-            if(!capture && nkillers[rootdepth] < MAX_KILLER)
-                killers[rootdepth][nkillers[rootdepth]++] = moves.moves[i];
+            if(!capture && nkillers[depth] < MAX_KILLER)
+                killers[depth][nkillers[depth]++] = moves.moves[i];
 
             transpostype = TRANSPOS_PV;
 
