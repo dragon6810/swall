@@ -9,7 +9,7 @@
 #include "zobrist.h"
 
 #define MAX_KILLER 8
-#define MAX_DEPTH 32
+#define MAX_DEPTH 64
 
 int16_t pscore[PIECE_COUNT] =
 {
@@ -272,9 +272,10 @@ static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
         return 9950; // a little less than mate
 
     // killers
-    for(i=0; i<nkillers[plies]; i++)
-        if(killers[plies][i] == mv)
-            return 9940;
+    if(plies >= 0)
+        for(i=0; i<nkillers[plies]; i++)
+            if(killers[plies][i] == mv)
+                return 9940;
 
     src = (mv & MOVEBITS_SRC_MASK) >> MOVEBITS_SRC_BITS;
     dst = (mv & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -504,7 +505,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         {
             if(!capture && nkillers[rootdepth] < MAX_KILLER)
                 killers[rootdepth][nkillers[rootdepth]++] = moves.moves[i];
-                
+
             transpostype = TRANSPOS_PV;
 
             alpha = eval;
@@ -543,11 +544,12 @@ move_t brain_runsearch(board_t* board, int timems)
     searchtime = timems - 10;
     searchcanceled = false;
     bestknown = 0;
+    memset(nkillers, 0, sizeof(nkillers));
 
     if(book_findmove(board, &move))
         return move;
     
-    for(i=1, move=0; ; i++)
+    for(i=1, move=0; i<MAX_DEPTH; i++)
     {
         score = brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, 16, &move);
         move_tolongalg(move, str);
