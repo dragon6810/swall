@@ -398,7 +398,7 @@ static int brain_calcext(board_t* board, move_t move, int next)
     if(board->check[board->tomove])
         ext++;
 
-    if(ptype == PIECE_PAWN && (dst / BOARD_LEN == 2 || dst / BOARD_LEN == BOARD_LEN - 2))
+    if(ptype == PIECE_PAWN && (dst / BOARD_LEN == 1 || dst / BOARD_LEN == BOARD_LEN - 2))
         ext++;
 
     if(type >= MOVETYPE_PROMQ && type <= MOVETYPE_PROMN)
