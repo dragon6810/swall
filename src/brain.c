@@ -381,6 +381,35 @@ static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta
     return besteval;
 }
 
+static int brain_calcext(board_t* board, move_t move, int next)
+{
+    int ext;
+
+    int dst, type;
+    piece_e ptype;
+
+    ext = 0;
+
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+
+    ptype = board->sqrs[dst] & SQUARE_MASK_TYPE;
+
+    if(board->check[board->tomove])
+        ext++;
+
+    if(ptype == PIECE_PAWN && (dst / BOARD_LEN == 2 || dst / BOARD_LEN == BOARD_LEN - 2))
+        ext++;
+
+    if(type >= MOVETYPE_PROMQ && type <= MOVETYPE_PROMN)
+        ext++;
+
+    if(ext > next)
+        ext = next;
+
+    return ext;
+}
+
 // if search is canceled, dont trust the results!
 static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int depth, int rootdepth, int next, move_t* outmove)
 {
@@ -435,11 +464,8 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     transpostype = TRANSPOS_UPPER;
     for(i=0; i<moves.count; i++)
     {
-        ext = 0;
-
         move_make(board, moves.moves[i], &mademove);
-        if(next > 0 && board->check[board->tomove])
-            ext++;
+        ext = brain_calcext(board, moves.moves[i], next);
         eval = -brain_search(board, -beta, -alpha, depth - 1 + ext, rootdepth + 1, next - ext, NULL);
         move_unmake(board, &mademove);
 
