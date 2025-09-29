@@ -26,7 +26,7 @@ void transpose_clear(ttable_t* table)
     memset(table->data, 0, table->size * sizeof(transpos_t));
 }
 
-transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth, bool nostrict)
+transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth, int alpha, int beta, bool nostrict)
 {
     uint64_t idx;
 
@@ -38,11 +38,15 @@ transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth, bool n
         return NULL;
     if(!nostrict && table->data[idx].depth < depth)
         return NULL;
+    if(table->data[idx].type == TRANSPOS_LOWER && table->data[idx].eval < beta)
+        return NULL;
+    if(table->data[idx].type == TRANSPOS_UPPER && table->data[idx].eval >= alpha)
+        return NULL;
 
     return &table->data[idx];
 }
 
-void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval, move_t move)
+void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval, move_t move, transpos_type_e type)
 {
     uint64_t idx;
 
@@ -53,6 +57,7 @@ void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval
     table->data[idx].hash = hash;
     table->data[idx].depth = depth;
     table->data[idx].eval = eval;
+    table->data[idx].type = type;
     table->data[idx].bestmove = move;
 }
 

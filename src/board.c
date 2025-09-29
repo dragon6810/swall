@@ -372,7 +372,8 @@ static void board_checkstalemate(board_t* board)
     if(!pval)
         return;
 
-    if(*pval >= 2)
+    // dropping this to two somehow makes the bot play horrendously. this makes no sense!
+    if(*pval >= 3)
         board->stalemate = true;
 }
 

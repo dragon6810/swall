@@ -243,7 +243,7 @@ static int16_t brain_eval(board_t* board)
     return eval;
 }
 
-int ntranspos = 0;
+int ntranspos = 0, ncutnodes = 0, npvnodes = 0;
 clock_t searchstart;
 bool searchcanceled;
 int searchtime;
@@ -261,7 +261,7 @@ static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
     if(!plies && mv == bestknown)
         return 9951;
 
-    transpos = transpose_find(&board->ttable, board->hash, 0, true);
+    transpos = transpose_find(&board->ttable, board->hash, 0, INT16_MIN + 1, INT16_MAX, true);
     if(transpos && transpos->bestmove == mv)
         return 9950; // a little less than mate
 
@@ -370,8 +370,13 @@ static int16_t brain_quiesencesearch(board_t* board, int16_t alpha, int16_t beta
         if(eval > alpha)
             alpha = eval;
         if(alpha >= beta)
+        {
+            ncutnodes++;
             return alpha;
+        }
     }
+
+    npvnodes++;
 
     return besteval;
 }
@@ -399,7 +404,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     if(board->stalemate)
         return 0;
 
-    transpos = transpose_find(&board->ttable, board->hash, depth, false);
+    transpos = transpose_find(&board->ttable, board->hash, depth, alpha, beta, false);
     if(transpos)
     {
         ntranspos++;
@@ -421,7 +426,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         if(board->check[board->tomove])
             eval = -10000 + rootdepth; // checkmate
 
-        transpose_store(&board->ttable, board->hash, depth, eval, 0);
+        transpose_store(&board->ttable, board->hash, depth, eval, 0, TRANSPOS_PV);
         return eval;
     }
 
@@ -448,14 +453,18 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         // move was so good that opponent will never let us get to this point
         if(alpha >= beta)
         {
+            ncutnodes++;
+            transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;
         }
     }
+    
+    npvnodes++;
 
     if(outmove)
         *outmove = bestmove;
 
-    transpose_store(&board->ttable, board->hash, depth, alpha, bestmove);
+    transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_PV);
     return alpha;
 }
 
@@ -467,7 +476,7 @@ move_t brain_runsearch(board_t* board, int timems)
     char str[MAX_LONGALG];
     int score;
 
-    ntranspos = 0;
+    ntranspos = ncutnodes = npvnodes = 0;
     searchstart = clock();
     searchtime = timems - 10;
     searchcanceled = false;
@@ -488,7 +497,7 @@ move_t brain_runsearch(board_t* board, int timems)
         bestknown = move;
     }
 
-    printf("searched to depth %d with %d transpositions\n", i - 1, ntranspos);
+    printf("searched to depth %d with %d transpositions, %d cut nodes, and %d pv nodes.\n", i - 1, ntranspos, ncutnodes, npvnodes);
 
     return move;
 }
