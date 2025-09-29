@@ -392,6 +392,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     int16_t eval;
     move_t bestmove;
     mademove_t mademove;
+    transpos_type_e transpostype;
     int ext;
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
@@ -431,6 +432,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     }
 
     bestmove = 0;
+    transpostype = TRANSPOS_UPPER;
     for(i=0; i<moves.count; i++)
     {
         ext = 0;
@@ -446,6 +448,8 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
 
         if(eval > alpha)
         {
+            transpostype = TRANSPOS_PV;
+
             alpha = eval;
             bestmove = moves.moves[i];
         }
@@ -464,7 +468,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     if(outmove)
         *outmove = bestmove;
 
-    transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_PV);
+    transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, transpostype);
     return alpha;
 }
 
