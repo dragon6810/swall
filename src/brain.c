@@ -259,7 +259,7 @@ static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
     transpos_t *transpos;
 
     if(!plies && mv == bestknown)
-        return 9951;
+        return 9960;
 
     transpos = transpose_find(&board->ttable, board->hash, 0, INT16_MIN + 1, INT16_MAX, true);
     if(transpos && transpos->bestmove == mv)
@@ -278,9 +278,11 @@ static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
     psrc = board->sqrs[src] & SQUARE_MASK_TYPE;
     pdst = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
+    // capture opponent
     if(pdst)
         score += pscore[pdst];
 
+    // opponent captures us
     if(board->attacks[!board->tomove][PIECE_NONE] & dstmask)
         score -= pscore[psrc];
 
@@ -422,6 +424,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     move_t bestmove;
     mademove_t mademove;
     transpos_type_e transpostype;
+    bool needsfullsearch;
     int ext;
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
@@ -465,8 +468,19 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     for(i=0; i<moves.count; i++)
     {
         move_make(board, moves.moves[i], &mademove);
+
         ext = brain_calcext(board, moves.moves[i], next);
-        eval = -brain_search(board, -beta, -alpha, depth - 1 + ext, rootdepth + 1, next - ext, NULL);
+
+        needsfullsearch = true;
+        if(i > 2 && depth - 1 > 2)
+        {
+            eval = -brain_search(board, -beta, -alpha, depth - 2, rootdepth + 1, next - ext, NULL);
+            needsfullsearch = eval > alpha;
+        }
+
+        if(needsfullsearch)
+            eval = -brain_search(board, -beta, -alpha, depth - 1 + ext, rootdepth + 1, next - ext, NULL);
+        
         move_unmake(board, &mademove);
 
         if(searchcanceled)
