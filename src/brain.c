@@ -544,13 +544,13 @@ move_t brain_runsearch(board_t* board, int timems)
     searchtime = timems - 10;
     searchcanceled = false;
     bestknown = 0;
-    memset(nkillers, 0, sizeof(nkillers));
 
     if(book_findmove(board, &move))
         return move;
     
     for(i=1, move=0; i<MAX_DEPTH; i++)
     {
+        memset(nkillers, 0, sizeof(nkillers));
         score = brain_search(board, INT16_MIN + 1, INT16_MAX, i, 0, 16, &move);
         move_tolongalg(move, str);
         printf("depth: %d. best move: %s. score: %d.\n", i, str, score);
