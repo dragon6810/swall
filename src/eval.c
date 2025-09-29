@@ -7,6 +7,24 @@ static const score_t startmaterial = 0
         + eval_pscore[PIECE_KNIGHT] * 2 
         + eval_pscore[PIECE_PAWN] * 8;
 
+static inline bitboard_t eval_isolatedpawnmask(team_e team, uint8_t square)
+{
+    const bitboard_t file = 0x1010101010101010;
+
+    int8_t f;
+    bitboard_t mask;
+
+    f = square + BOARD_LEN;
+
+    mask = 0;
+    if(f)
+        mask |= file << (f - 1);
+    if(f < BOARD_LEN - 1)
+        mask |= file << (f + 1);
+
+    return mask;
+}
+
 static inline bitboard_t eval_passedpawnmask(team_e team, uint8_t square)
 {
     const bitboard_t file = 0x1010101010101010;
@@ -37,6 +55,8 @@ static const score_t passedpawnbonus[BOARD_LEN] = { 0, 0, 10, 20, 40, 60, 80, 0 
 
 static inline void eval_pawnstructure(board_t* board, score_t bonus[TEAM_COUNT])
 {
+    const score_t isolatedpenalty = 50;
+
     int i;
     team_e t;
 
@@ -52,16 +72,20 @@ static inline void eval_pawnstructure(board_t* board, score_t bonus[TEAM_COUNT])
             if((board->sqrs[square] & SQUARE_MASK_TYPE) != PIECE_PAWN)
                 continue;
 
-            r = square / BOARD_LEN;
             mask = eval_passedpawnmask(t, square);
 
-            if(board->pboards[!t][PIECE_PAWN] & mask)
-                continue;
+            if(!(board->pboards[!t][PIECE_PAWN] & mask))
+            {
+                r = square / BOARD_LEN;
+                if(t == TEAM_BLACK)
+                    r = BOARD_LEN - r;
 
-            if(t == TEAM_BLACK)
-                r = BOARD_LEN - r;
+                bonus[t] += passedpawnbonus[r];
+            }
 
-            bonus[t] += passedpawnbonus[r];
+            mask = eval_isolatedpawnmask(t, square);
+            if(!(board->pboards[t][PIECE_PAWN] & mask))
+                bonus[t] -= isolatedpenalty;
         }
     }
 }
