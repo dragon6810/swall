@@ -8,7 +8,7 @@
 #include "book.h"
 #include "zobrist.h"
 
-#define MAX_KILLER 8
+#define MAX_KILLER 4
 #define MAX_DEPTH 64
 
 int16_t pscore[PIECE_COUNT] =
