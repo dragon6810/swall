@@ -46,7 +46,7 @@ transpos_t* transpose_find(ttable_t* table, uint64_t hash, uint8_t depth, int al
     return &table->data[idx];
 }
 
-void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, int16_t eval, move_t move, transpos_type_e type)
+void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, score_t eval, move_t move, transpos_type_e type)
 {
     uint64_t idx;
 

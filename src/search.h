@@ -6,6 +6,6 @@
 #include "board.h"
 #include "move.h"
 
-move_t brain_runsearch(board_t* board, int timems);
+move_t search(board_t* board, int timems);
 
 #endif

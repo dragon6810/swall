@@ -6,7 +6,7 @@
 
 #include "board.h"
 #include "book.h"
-#include "brain.h"
+#include "search.h"
 #include "move.h"
 #include "perft.h"
 #include "zobrist.h"
@@ -211,7 +211,7 @@ void uci_cmd_go(const char* args)
             searchtime = times[board.tomove] / 25;
     }
 
-    move = brain_runsearch(&board, searchtime);
+    move = search(&board, searchtime);
     move_tolongalg(move, str);
 
     printf("bestmove %s\n", str);
