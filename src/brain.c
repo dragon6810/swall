@@ -8,6 +8,9 @@
 #include "book.h"
 #include "zobrist.h"
 
+#define MAX_KILLER 8
+#define MAX_DEPTH 32
+
 int16_t pscore[PIECE_COUNT] =
 {
     0,   // PIECE_NONE
@@ -248,11 +251,14 @@ clock_t searchstart;
 bool searchcanceled;
 int searchtime;
 move_t bestknown;
+int nkillers[MAX_DEPTH] = {};
+move_t killers[MAX_DEPTH][MAX_KILLER] = {};
 
 static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
 {
+    int i;
+    
     int16_t score;
-
     bitboard_t dstmask;
     int src, dst, type;
     piece_e psrc, pdst;
@@ -264,6 +270,11 @@ static int16_t brain_moveguess(board_t* board, move_t mv, int plies)
     transpos = transpose_find(&board->ttable, board->hash, 0, INT16_MIN + 1, INT16_MAX, true);
     if(transpos && transpos->bestmove == mv)
         return 9950; // a little less than mate
+
+    // killers
+    for(i=0; i<nkillers[plies]; i++)
+        if(killers[plies][i] == mv)
+            return 9940;
 
     src = (mv & MOVEBITS_SRC_MASK) >> MOVEBITS_SRC_BITS;
     dst = (mv & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -425,6 +436,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     mademove_t mademove;
     transpos_type_e transpostype;
     bool needsfullsearch;
+    bool capture;
     int ext;
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
@@ -467,12 +479,14 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
     transpostype = TRANSPOS_UPPER;
     for(i=0; i<moves.count; i++)
     {
+        capture = board->sqrs[(moves.moves[i] & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS];
+
         move_make(board, moves.moves[i], &mademove);
 
         ext = brain_calcext(board, moves.moves[i], next);
 
         needsfullsearch = true;
-        if(i > 2 && depth - 1 > 2)
+        if(i > 2 && depth - 1 > 2 && !ext)
         {
             eval = -brain_search(board, -beta, -alpha, depth - 2, rootdepth + 1, next - ext, NULL);
             needsfullsearch = eval > alpha;
@@ -488,6 +502,9 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
 
         if(eval > alpha)
         {
+            if(!capture && nkillers[rootdepth] < MAX_KILLER)
+                killers[rootdepth][nkillers[rootdepth]++] = moves.moves[i];
+                
             transpostype = TRANSPOS_PV;
 
             alpha = eval;
@@ -497,6 +514,7 @@ static int16_t brain_search(board_t* board, int16_t alpha, int16_t beta, int dep
         // move was so good that opponent will never let us get to this point
         if(alpha >= beta)
         {
+            
             ncutnodes++;
             transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;
