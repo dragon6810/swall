@@ -7,6 +7,7 @@
 #include "board.h"
 #include "book.h"
 #include "search.h"
+#include "magic.h"
 #include "move.h"
 #include "perft.h"
 #include "zobrist.h"
@@ -336,6 +337,7 @@ int main(int argc, char** argv)
 
     srand(time(NULL));
 
+    magic_init();
     move_init();
     book_load("baron30.bin");
 
