@@ -20,6 +20,8 @@ static const int diroffs[DIR_COUNT] =
     -BOARD_LEN + 1,
 };
 
+extern int sweeptable[BOARD_AREA][DIR_COUNT];
+
 typedef enum
 {
     MOVETYPE_DEFAULT=0, // just moving a piece

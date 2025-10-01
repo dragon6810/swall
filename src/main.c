@@ -14,6 +14,9 @@
 
 #define MAX_INPUT 4096
 
+#define VERSION_MAJ 0
+#define VERSION_MIN 17
+
 board_t board = {};
 
 int tryparsemove(const char* str)
@@ -77,6 +80,11 @@ int tryparsemove(const char* str)
     return str - start;
 }
 
+void uci_cmd_magic(const char* args)
+{
+    magic_findmagic();
+}
+
 void uci_cmd_perft(const char* args)
 {
     char depthstr[MAX_INPUT];
@@ -114,6 +122,12 @@ void uci_cmd_go(const char* args)
     if(!strncmp(args, "perft", 5))
     {
         uci_cmd_perft(args + 5);
+        return;
+    }
+
+    if(!strncmp(args, "magic", 5))
+    {
+        uci_cmd_magic(args + 5);
         return;
     }
 
@@ -341,6 +355,7 @@ int main(int argc, char** argv)
     move_init();
     book_load("baron30.bin");
 
+    printf("swall v%d.%d by Henry Dunn\n", VERSION_MAJ, VERSION_MIN);
     uci_main();
     
     return 0;

@@ -37,6 +37,40 @@ int diroffsrf[DIR_COUNT][2] =
     {  1, -1 }, // DIR_SE
 };
 
+static bitboard_t magic_findmoves(magicpiece_e p, uint8_t pos, bitboard_t blockers)
+{
+    int i;
+    dir_e d;
+
+    dir_e start, end;
+    bitboard_t mask;
+    int square;
+
+    if(p == MAGIC_ROOK)
+    {
+        start = DIR_E;
+        end = DIR_S;
+    }
+    else
+    {
+        start = DIR_NE;
+        end = DIR_SE;
+    }
+
+    mask = 0;
+    for(d=start; d<=end; d++)
+    {
+        for(i=1, square=pos+diroffs[d]; i<=sweeptable[pos][d]; i++, square+=diroffs[d])
+        {
+            mask |= (uint64_t) 1 << square;
+            if(blockers & ((uint64_t) 1 << square))
+                break;
+        }
+    }
+
+    return mask;
+}
+
 static bitboard_t magic_scattertomask(bitboard_t blockers, bitboard_t mask)
 {
     bitboard_t dstbit;
@@ -55,7 +89,7 @@ static bitboard_t magic_scattertomask(bitboard_t blockers, bitboard_t mask)
     return scattered;
 }
 
-static void magic_genblockers(magicset_t* set, uint8_t pos, bitboard_t markup)
+static void magic_genblockers(magicset_t* set, magicpiece_e p, uint8_t pos)
 {
     uint64_t i;
 
@@ -76,12 +110,7 @@ static void magic_genblockers(magicset_t* set, uint8_t pos, bitboard_t markup)
     for(i=0; i<set->nboards; i++)
     {
         blockers = magic_scattertomask(i, set->mask);
-        printf("mask:\n");
-        board_printbits(set->mask);
-        printf("blockers:\n");
-        board_printbits(i);
-        printf("scattered:\n");
-        board_printbits(blockers);
+        set->boards[i] = magic_findmoves(p, pos, blockers);
     }
 }
 
@@ -103,62 +132,19 @@ static bitboard_t magic_getborder(uint8_t pos)
     return mask;
 }
 
-static bitboard_t magic_makemask(magicpiece_e piece, uint8_t pos)
-{
-    int i;
-    dir_e d;
-
-    dir_e start, end;
-    bitboard_t mask;
-    int square;
-    int r, f, curr, curf;
-
-    if(piece == MAGIC_ROOK)
-    {
-        start = DIR_E;
-        end = DIR_S;
-    }
-    else
-    {
-        start = DIR_NE;
-        end = DIR_SE;
-    }
-
-    mask = 0;
-    for(d=start; d<=end; d++)
-    {
-        r = pos / BOARD_LEN;
-        f = pos % BOARD_LEN;
-        for(i=1;;i++)
-        {
-            curf = f + diroffsrf[d][0] * i;
-            curr = r + diroffsrf[d][1] * i;
-            square = pos + diroffs[d] * i;
-
-            if(curf < 0 || curr < 0 || curf >= BOARD_LEN || curr >= BOARD_LEN)
-                break;
-
-            mask |= (uint64_t) 1 << square;
-        }
-    }
-
-    return mask;
-}
-
 static void magic_makeset(magicpiece_e piece, uint8_t pos)
 {
     magicset_t *set;
-    bitboard_t fullmask, border, markup;
+    bitboard_t fullmask, border;
 
     set = &magicsets[piece][pos];
 
-    fullmask = magic_makemask(piece, pos);
+    fullmask = magic_findmoves(piece, pos, 0);
     border = magic_getborder(pos);
 
     set->mask = fullmask & ~border;
-    markup = fullmask & border;
 
-    magic_genblockers(set, pos, markup);
+    magic_genblockers(set, piece, pos);
 }
 
 void magic_init(void)
@@ -169,4 +155,9 @@ void magic_init(void)
     for(p=0; p<MAGIC_COUNT; p++)
         for(i=0; i<BOARD_AREA; i++)
             magic_makeset(p, i);
+}
+
+void magic_findmagic(void)
+{
+    printf("find magic\n");
 }
