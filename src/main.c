@@ -351,8 +351,8 @@ int main(int argc, char** argv)
 
     srand(time(NULL));
 
-    magic_init();
     move_init();
+    magic_init();
     book_load("baron30.bin");
 
     printf("swall v%d.%d by Henry Dunn\n", VERSION_MAJ, VERSION_MIN);
