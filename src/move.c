@@ -768,14 +768,22 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
 void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
 {
-    if((board->sqrs[src] & SQUARE_MASK_TYPE) != PIECE_KING && board->dblcheck)
+    piece_e piece;
+
+    piece = board->sqrs[src] & SQUARE_MASK_TYPE;
+
+    if(piece == PIECE_KING)
+    {
+        move_kingmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        return;
+    }
+
+    // you can only move your king in double check
+    if(board->dblcheck)
         return;
 
-    switch(board->sqrs[src] & SQUARE_MASK_TYPE)
+    switch(piece)
     {
-    case PIECE_KING:
-        move_kingmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
-        break;
     case PIECE_QUEEN:
         move_queenmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
         break;
@@ -790,6 +798,8 @@ void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly
         break;
     case PIECE_PAWN:
         move_pawnmoves(moves, board, src, board->sqrs[src] >> SQUARE_BITS_TEAM, caponly);
+        break;
+    default:
         break;
     }
 }
