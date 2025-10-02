@@ -6,23 +6,12 @@
 #include <string.h>
 #include <time.h>
 
-#include "board.h"
 #include "move.h"
-
-typedef enum
-{
-    MAGIC_ROOK=0,
-    MAGIC_BISHOP,
-    MAGIC_COUNT,
-} magicpiece_e;
 
 // one per square, per piece
 typedef struct magicset_s
 {
     bitboard_t mask;
-    uint64_t magic;
-    uint8_t shift;
-
     bitboard_t *boards;
 } magicset_t;
 
@@ -127,6 +116,11 @@ static bitboard_t magic_findmoves(magicpiece_e p, uint8_t pos, bitboard_t blocke
     return mask;
 }
 
+static bitboard_t magic_transformmagic(bitboard_t blockers, magicpiece_e p, uint8_t pos)
+{
+    return blockers * magics[p][pos] >> (BOARD_AREA - nrelevent[p][pos]);
+}
+
 static bitboard_t magic_scattertomask(bitboard_t blockers, bitboard_t mask)
 {
     bitboard_t dstbit;
@@ -149,25 +143,16 @@ static void magic_genblockers(magicset_t* set, magicpiece_e p, uint8_t pos)
 {
     uint64_t i;
 
-    uint8_t n;
-    int nboards;
-    bitboard_t mask, blockers;
+    uint64_t nboards;
+    bitboard_t blockers;
 
-    n = 0;
-    mask = set->mask;
-    while(mask)
-    {
-        mask &= mask - 1;
-        n++;
-    }
-
-    nboards = (bitboard_t) 1 << n;
+    nboards = (bitboard_t) 1 << nrelevent[p][pos];
     set->boards = malloc(sizeof(bitboard_t) * nboards);
 
     for(i=0; i<nboards; i++)
     {
         blockers = magic_scattertomask(i, set->mask);
-        set->boards[i] = magic_findmoves(p, pos, blockers);
+        set->boards[magic_transformmagic(blockers, p, pos)] = magic_findmoves(p, pos, blockers);
     }
 }
 
@@ -318,4 +303,9 @@ void magic_findmagic(void)
         printf("  },\n");
     }
     printf("}\n");
+}
+
+bitboard_t magic_lookup(magicpiece_e p, uint8_t pos, bitboard_t blockers)
+{
+    return magicsets[p][pos].boards[magic_transformmagic(blockers & magicsets[p][pos].mask, p, pos)];
 }
