@@ -268,19 +268,6 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     board->tomove = !board->tomove;
     board_update(board);
     (*move_threefold(board))++;
-
-    if(board->check[!board->tomove])
-    {
-        printf("legality pruning failed!\n");
-        printf("%s moved %c%c -> %c%c into check:\n", !board->tomove ? "black" : "white",
-            'a' + src % BOARD_LEN, '1' + src / BOARD_LEN, 'a' + dst % BOARD_LEN, '1' + dst / BOARD_LEN);
-        board_print(board);
-        printf("%s attack:\n", board->tomove ? "black" : "white");
-        board_printbits(board->attacks[board->tomove][PIECE_NONE]);
-        printf("%s king:\n", !board->tomove ? "black" : "white");
-        board_printbits(board->pboards[!board->tomove][PIECE_KING]);
-        exit(1);
-    }
 }
 
 // there's a lot of repeated code from move_domove.

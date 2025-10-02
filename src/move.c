@@ -6,6 +6,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "magic.h"
+
 int sweeptable[BOARD_AREA][DIR_COUNT];
 
 void move_tolongalg(move_t move, char str[MAX_LONGALG])
@@ -130,42 +132,6 @@ static void move_addiflegal(board_t* board, moveset_t* moves, move_t move, piece
 {
     if(move_islegal(board, move, ptype, team))
         moves->moves[moves->count++] = move;
-}
-
-static void move_sweep
-(
-    moveset_t* set, board_t* board, 
-    uint8_t src, dir_e dir, int max, 
-    bool nocapture, movetype_e type, 
-    piece_e ptype, team_e team, bool caponly
-)
-{
-    int i;
-
-    int idx;
-    move_t move;
-
-    for(i=0, idx=src+diroffs[dir]; i<max; i++, idx+=diroffs[dir])
-    {
-        // friendly
-        if(((uint64_t) 1 << idx) & board->pboards[team][PIECE_NONE])
-            break;
-
-        // enemy, but we can't capture
-        if(nocapture && (((uint64_t) 1 << idx) & board->pboards[!team][PIECE_NONE]))
-            break;
-
-        if(!caponly || ((uint64_t) 1 << idx) & board->pboards[!team][PIECE_NONE])
-        {
-            move = src;
-            move |= idx << MOVEBITS_DST_BITS;
-            move |= (uint16_t) type << MOVEBITS_TYP_BITS;
-            move_addiflegal(board, set, move, ptype, team);
-        }
-
-        if(((uint64_t) 1 << idx) & board->pboards[!team][PIECE_NONE])
-            break;
-    }
 }
 
 static void move_sweepatk(board_t* board, piece_e ptype, uint8_t src, dir_e dir, int max, team_e team)
@@ -682,20 +648,71 @@ static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e
     }
 }
 
-static void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t src, bitboard_t moves)
+{
+    uint8_t dst;
+    move_t move;
+
+    while(moves)
+    {
+        dst = __builtin_ctzll(moves);
+        moves &= moves - 1;
+
+        move = src;
+        move |= (move_t) dst << MOVEBITS_DST_BITS;
+        set->moves[set->count++] = move;
+    }
+}
+
+static bitboard_t move_getslideratk(board_t* board, magicpiece_e type, uint8_t src, bool caponly)
 {
     int i;
 
-    for(i=DIR_NE; i<DIR_COUNT; i++)
-        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_BISHOP, team, caponly);
+    team_e team;
+    bitboard_t srcmask, moves;
+
+    team = board->sqrs[src] >> SQUARE_BITS_TEAM;
+    srcmask = (bitboard_t) 1 << src;
+
+    moves = magic_lookup(type, src, board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
+    if(caponly)
+        moves &= board->pboards[!team][PIECE_NONE];
+    moves &= ~board->pboards[team][PIECE_NONE];
+    if(board->threat)
+        moves &= board->threat;
+
+    for(i=0; i<board->npins; i++)
+    {
+        if(!(srcmask & board->pins[i]))
+            continue;
+        moves &= board->pins[i];
+    }
+
+    return moves;
+}
+
+static void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+{
+    bitboard_t moves;
+
+    moves = move_getslideratk(board, MAGIC_BISHOP, src, caponly);
+    move_bitboardtomoves(board, set, src, moves);
 }
 
 static void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
-    int i;
+    bitboard_t moves;
 
-    for(i=0; i<DIR_NE; i++)
-        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_ROOK, team, caponly);
+    moves = move_getslideratk(board, MAGIC_ROOK, src, caponly);
+    move_bitboardtomoves(board, set, src, moves);
+}
+
+static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+{
+    bitboard_t moves;
+
+    moves = move_getslideratk(board, MAGIC_ROOK, src, caponly) | move_getslideratk(board, MAGIC_BISHOP, src, caponly);
+    move_bitboardtomoves(board, set, src, moves);
 }
 
 static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
@@ -746,14 +763,6 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
         move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
         move_addiflegal(board, set, move, PIECE_KING, team);
     }
-}
-
-static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
-{
-    int i;
-
-    for(i=0; i<DIR_COUNT; i++)
-        move_sweep(set, board, src, i, sweeptable[src][i], false, MOVETYPE_DEFAULT, PIECE_QUEEN, team, caponly);
 }
 
 void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
