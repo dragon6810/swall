@@ -8,7 +8,8 @@
 
 #include "magic.h"
 
-int sweeptable[BOARD_AREA][DIR_COUNT];
+int sweeptable[BOARD_AREA][DIR_COUNT] = {};
+bitboard_t kingatk[BOARD_AREA] = {};
 
 void move_tolongalg(move_t move, char str[MAX_LONGALG])
 {
@@ -717,51 +718,51 @@ static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e 
 
 static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
-    int i;
-
-    int dst;
+    uint8_t dst;
+    bitboard_t moves;
     move_t move;
-    bitboard_t dstmask, allpiece;
+    bitboard_t travelmask, allpiece;
+
+    moves = kingatk[src];
+    moves &= ~board->pboards[team][PIECE_NONE];
+    moves &= ~board->attacks[!team][PIECE_NONE];
+    if(caponly)
+        moves &= board->pboards[!team][PIECE_NONE];
+
+    // dont use bitboardtomoves because that does legality checks that dont work for kings
+    while(moves)
+    {
+        dst = __builtin_ctzll(moves);
+        moves &= moves - 1;
+
+        move = src;
+        move |= (move_t) dst << MOVEBITS_DST_BITS;
+        set->moves[set->count++] = move;
+    }
+
+    if(caponly || board->check[team])
+        return;
 
     allpiece = board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE];
-
-    for(i=0; i<DIR_COUNT; i++)
-    {
-        if(!sweeptable[src][i])
-            continue;
-
-        dst = src + diroffs[i];
-        dstmask = (uint64_t) 1 << dst;
-
-        move = src;
-        move |= dst << MOVEBITS_DST_BITS;
-        if(board->pboards[team][PIECE_NONE] & dstmask)
-            continue;
-        if(caponly && !(board->pboards[!team][PIECE_NONE] & dstmask))
-            continue;
-
-        move_addiflegal(board, set, move, PIECE_KING, team);
-    }
-
-    if(caponly)
-        return;
     
-    if(board->kcastle[team] 
-    && !(allpiece & ((uint64_t) 1 << (src + 1) | (uint64_t) 1 << (src + 2))))
+    dst = src + 2;
+    travelmask = (uint64_t) 1 << (src + 1) | (uint64_t) 1 << dst;
+    if(board->kcastle[team] && !(allpiece & travelmask) && !(board->attacks[!team][PIECE_NONE] & travelmask))
     {
         move = src;
-        move |= ((uint16_t)src+2) << MOVEBITS_DST_BITS;
-        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        move_addiflegal(board, set, move, PIECE_KING, team);
+        move |= (move_t) dst << MOVEBITS_DST_BITS;
+        move |= (move_t) MOVETYPE_CASTLE << MOVEBITS_TYP_BITS;
+        set->moves[set->count++] = move;
     }
 
-    if(board->qcastle[team]
-    && !(allpiece & ((uint64_t) 1 << (src - 1) | (uint64_t) 1 << (src - 2) | (uint64_t) 1 << (src - 3))))
+    dst = src - 2;
+    travelmask = (uint64_t) 1 << (src - 1) | (uint64_t) 1 << dst;
+    if(board->qcastle[team] && !(allpiece & travelmask) && !(board->attacks[!team][PIECE_NONE] & travelmask))
     {
         move = src;
-        move |= ((uint16_t)src-2) << MOVEBITS_DST_BITS;
-        move |= ((uint16_t)MOVETYPE_CASTLE) << MOVEBITS_TYP_BITS;
-        move_addiflegal(board, set, move, PIECE_KING, team);
+        move |= (move_t) dst << MOVEBITS_DST_BITS;
+        move |= (move_t) MOVETYPE_CASTLE << MOVEBITS_TYP_BITS;
+        set->moves[set->count++] = move;
     }
 }
 
@@ -841,6 +842,24 @@ void move_printset(moveset_t* set)
     }
 }
 
+static bitboard_t move_kingboard(uint8_t src)
+{
+    dir_e d;
+
+    bitboard_t bits;
+
+    bits = 0;
+    for(d=0; d<DIR_COUNT; d++)
+    {
+        if(!sweeptable[src][d])
+            continue;
+
+        bits |= (bitboard_t) 1 << (src + diroffs[d]);
+    }
+
+    return bits;
+}
+
 static int move_maxsweep(dir_e dir, uint8_t src)
 {
     int r, f;
@@ -886,6 +905,9 @@ void move_init(void)
     dir_e dir;
 
     for(i=0; i<BOARD_AREA; i++)
+    {
         for(dir=0; dir<DIR_COUNT; dir++)
             sweeptable[i][dir] = move_maxsweep(dir, i);
+        kingatk[i] = move_kingboard(i);
+    }
 }
