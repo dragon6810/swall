@@ -10,6 +10,10 @@
 
 int sweeptable[BOARD_AREA][DIR_COUNT] = {};
 bitboard_t kingatk[BOARD_AREA] = {};
+bitboard_t knightatk[BOARD_AREA] = {};
+bitboard_t pawnatk[TEAM_COUNT][BOARD_AREA] = {};
+bitboard_t pawnpush[TEAM_COUNT][BOARD_AREA] = {};
+bitboard_t pawndbl[TEAM_COUNT][BOARD_AREA] = {};
 
 void move_tolongalg(move_t move, char str[MAX_LONGALG])
 {
@@ -77,62 +81,6 @@ static int move_knightoffs(int idx, int src)
         return -1;
 
     return r * BOARD_LEN + f;
-}
-
-static bool move_islegal(board_t* board, move_t move, piece_e ptype, team_e team)
-{
-    int i;
-    bitboard_t *curpin;
-
-    bitboard_t srcmask, dstmask, mask;
-    uint8_t src, dst, type;
-
-    src = move & MOVEBITS_SRC_MASK;
-    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
-
-    if(ptype == PIECE_KING)
-    {
-        mask = (uint64_t) 1 << dst;
-        if(type == MOVETYPE_CASTLE)
-        {
-            // kingside
-            if(src < dst)
-            {
-                mask |= (uint64_t) 1 << src;
-                mask |= (uint64_t) 1 << (src + 1);
-            }
-            // queenside
-            else
-            {
-                mask |= (uint64_t) 1 << src;
-                mask |= (uint64_t) 1 << (src - 1);
-            }
-        }
-
-        return !(board->attacks[!team][PIECE_NONE] & mask);
-    }
-
-    srcmask = (uint64_t) 1 << src;
-    dstmask = (uint64_t) 1 << dst;
-
-    if(board->isthreat && !(dstmask & board->threat))
-        return false;
-    
-    for(i=0, curpin=board->pins; i<board->npins; i++, curpin++)
-    {
-        // stepping out of a pin we were in.
-        if((*curpin & srcmask) && !(*curpin & dstmask))
-            return false;
-    }
-
-    return true;
-}
-
-static void move_addiflegal(board_t* board, moveset_t* moves, move_t move, piece_e ptype, team_e team)
-{
-    if(move_islegal(board, move, ptype, team))
-        moves->moves[moves->count++] = move;
 }
 
 static void move_sweepatk(board_t* board, piece_e ptype, uint8_t src, dir_e dir, int max, team_e team)
@@ -531,124 +479,6 @@ void move_findthreats(board_t* board)
     }
 }
 
-static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
-{
-    int i;
-    int type;
-
-    bool dbl;
-    int dst;
-    int starttype, stoptype;
-    dir_e dir, atk[2];
-    move_t move;
-    bitboard_t dstmask;
-
-    starttype = stoptype = MOVETYPE_DEFAULT;
-
-    if(team == TEAM_WHITE)
-    {
-        if(src / BOARD_LEN == BOARD_LEN-2)
-        {
-            starttype = MOVETYPE_PROMQ;
-            stoptype = MOVETYPE_PROMN;
-        }
-        dbl = (src / BOARD_LEN == 1);
-        dir = DIR_N;
-        atk[0] = DIR_NW;
-        atk[1] = DIR_NE;
-    }
-    else
-    {
-        if(src / BOARD_LEN == 1)
-        {
-            starttype = MOVETYPE_PROMQ;
-            stoptype = MOVETYPE_PROMN;
-        }
-        dbl = (src / BOARD_LEN == BOARD_LEN - 2);
-        dir = DIR_S;
-        atk[0] = DIR_SW;
-        atk[1] = DIR_SE;
-    }
-    
-    dst = src + diroffs[dir];
-    dstmask = (uint64_t) 1 << dst;
-    if(!caponly && !((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & dstmask))
-    {
-        for(type=starttype; type<=stoptype; type++)
-        {
-            move = src;
-            move |= ((uint16_t)dst) << MOVEBITS_DST_BITS;
-            move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-            move_addiflegal(board, set, move, PIECE_PAWN, team);
-        }
-
-        dst += diroffs[dir];
-        dstmask = (uint64_t) 1 << dst;
-        if(dbl && !((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & dstmask))
-        {
-            move = src;
-            move |= ((uint16_t)dst) << MOVEBITS_DST_BITS;
-            move_addiflegal(board, set, move, PIECE_PAWN, team);
-        }
-    }
-
-    for(i=0; i<2; i++)
-    {
-        dst = src + diroffs[atk[i]];
-        // edge of board puts us in different rank
-        if(dst / BOARD_LEN != (src + diroffs[dir]) / BOARD_LEN)
-            continue;
-        dstmask = (uint64_t) 1 << dst;
-
-        if(board->enpas == dst && !board->isenpaspin)
-        {
-            move = src;
-            move |= dst << MOVEBITS_DST_BITS;
-            move |= ((uint16_t)MOVETYPE_ENPAS) << MOVEBITS_TYP_BITS;
-            move_addiflegal(board, set, move, PIECE_PAWN, team);
-            
-            // no need to check normal attacks since logically the square must be clear
-            continue;
-        }
-
-        if(!(board->pboards[!team][PIECE_NONE] & dstmask))
-            continue;
-        
-        for(type=starttype; type<=stoptype; type++)
-        {
-            move = src;
-            move |= dst << MOVEBITS_DST_BITS;
-            move |= ((uint16_t)type) << MOVEBITS_TYP_BITS;
-            move_addiflegal(board, set, move, PIECE_PAWN, team);
-        }
-    }
-}
-
-static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
-{
-    int i;
-
-    int dst;
-    move_t move;
-    
-    for(i=0; i<8; i++)
-    {
-        dst = move_knightoffs(i, src);
-        if(dst < 0)
-            continue;
-
-        if(board->pboards[team][PIECE_NONE] & (uint64_t) 1 << dst)
-            continue;
-
-        if(caponly && !(board->pboards[!team][PIECE_NONE] & (uint64_t) 1 << dst))
-            continue;
-
-        move = src;
-        move |= dst << MOVEBITS_DST_BITS;
-        move_addiflegal(board, set, move, PIECE_KNIGHT, team);
-    }
-}
-
 static void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t src, bitboard_t moves)
 {
     uint8_t dst;
@@ -663,6 +493,92 @@ static void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t src, bi
         move |= (move_t) dst << MOVEBITS_DST_BITS;
         set->moves[set->count++] = move;
     }
+}
+
+static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+{
+    const bitboard_t promotionmask = 0xFF000000000000FF;
+
+    int i;
+
+    uint8_t dst;
+    int starttype, stoptype;
+    move_t move;
+    bitboard_t srcmask, moves;
+
+    srcmask = (bitboard_t) 1 << src;
+
+    moves = 0;
+    if(!caponly)
+    {
+        moves |= pawnpush[team][src] & ~(board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
+        if(moves)
+            moves |= pawndbl[team][src] & ~(board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
+    }
+    moves |= pawnatk[team][src] & board->pboards[!team][PIECE_NONE];
+
+    if(board->isthreat)
+        moves &= board->threat;
+    for(i=0; i<board->npins; i++)
+    {
+        if(!(srcmask & board->pins[i]))
+            continue;
+        moves &= board->pins[i];
+    }
+
+    starttype = stoptype = MOVETYPE_DEFAULT;
+    if(moves & promotionmask)
+    {
+        starttype = MOVETYPE_PROMQ;
+        stoptype = MOVETYPE_PROMN;
+    }
+
+    while(moves)
+    {
+        dst = __builtin_ctzll(moves);
+        moves &= moves - 1;
+
+        for(i=starttype; i<=stoptype; i++)
+        {
+            move = src;
+            move |= (move_t) dst << MOVEBITS_DST_BITS;
+            move |= (move_t) i << MOVEBITS_TYP_BITS;
+            set->moves[set->count++] = move;
+        }
+    }
+
+    if(!board->isenpaspin && (pawnatk[team][src] & ((bitboard_t) 1 << board->enpas)))
+    {
+        move = src;
+        move |= (move_t) board->enpas << MOVEBITS_DST_BITS;
+        move |= (move_t) MOVETYPE_ENPAS << MOVEBITS_TYP_BITS;
+        set->moves[set->count++] = move;
+    }
+}
+
+static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+{
+    int i;
+
+    bitboard_t srcmask, moves;
+
+    srcmask = (bitboard_t) 1 << src;
+
+    moves = knightatk[src];
+    if(caponly)
+        moves &= board->pboards[!team][PIECE_NONE];
+    moves &= ~board->pboards[team][PIECE_NONE];
+    if(board->threat)
+        moves &= board->threat;
+
+    for(i=0; i<board->npins; i++)
+    {
+        if(!(srcmask & board->pins[i]))
+            continue;
+        moves &= board->pins[i];
+    }
+
+    move_bitboardtomoves(board, set, src, moves);
 }
 
 static bitboard_t move_getslideratk(board_t* board, magicpiece_e type, uint8_t src, bool caponly)
@@ -729,16 +645,7 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     if(caponly)
         moves &= board->pboards[!team][PIECE_NONE];
 
-    // dont use bitboardtomoves because that does legality checks that dont work for kings
-    while(moves)
-    {
-        dst = __builtin_ctzll(moves);
-        moves &= moves - 1;
-
-        move = src;
-        move |= (move_t) dst << MOVEBITS_DST_BITS;
-        set->moves[set->count++] = move;
-    }
+    move_bitboardtomoves(board, set, src, moves);
 
     if(caponly || board->check[team])
         return;
@@ -852,6 +759,60 @@ void move_printset(moveset_t* set)
     }
 }
 
+static void move_pawnboards(uint8_t src)
+{
+    int i;
+    team_e t;
+
+    int r, f;
+    int targetrank, homerank;
+
+    f = src % BOARD_LEN;
+    r = src / BOARD_LEN;
+
+    for(t=0; t<TEAM_COUNT; t++)
+    {
+        pawnatk[t][src] = pawnpush[t][src] = pawndbl[t][src] = 0;
+        targetrank = r + PAWN_OFFS(t) / BOARD_LEN;
+        homerank = t == TEAM_WHITE ? 1 : BOARD_LEN - 2;
+
+        if(targetrank < 0 || targetrank >= BOARD_LEN)
+            continue;
+
+        pawnpush[t][src] |= (bitboard_t) 1 << (src + PAWN_OFFS(t));
+        if(r == homerank)
+            pawndbl[t][src] |= (bitboard_t) 1 << (src + 2 * PAWN_OFFS(t));
+        
+        for(i=-1; i<=1; i+=2)
+        {
+            if(f + i < 0 || f + i >= BOARD_LEN)
+                continue;
+
+            pawnatk[t][src] |= (bitboard_t) 1 << (src + PAWN_OFFS(t) + i);
+        }
+    }
+}
+
+static bitboard_t move_knightboard(uint8_t src)
+{
+    int i;
+
+    int dst;
+    bitboard_t bits;
+
+    bits = 0;
+    for(i=0; i<8; i++)
+    {
+        dst = move_knightoffs(i, src);
+        if(dst < 0)
+            continue;
+
+        bits |= (bitboard_t) 1 << dst;
+    }
+
+    return bits;
+}
+
 static bitboard_t move_kingboard(uint8_t src)
 {
     dir_e d;
@@ -919,5 +880,7 @@ void move_init(void)
         for(dir=0; dir<DIR_COUNT; dir++)
             sweeptable[i][dir] = move_maxsweep(dir, i);
         kingatk[i] = move_kingboard(i);
+        knightatk[i] = move_knightboard(i);
+        move_pawnboards(i);
     }
 }
