@@ -259,8 +259,8 @@ uint64_t zobrist_hash(board_t* board)
     if(board->qcastle[TEAM_BLACK])
         hash ^= hashes[771];
 
-    if(board->enpas != 0xFF 
-    && (board->attacks[board->tomove][PIECE_PAWN] & (uint64_t) 1 << board->enpas))
+    // this one line means we have to store attacks for both teams >:(
+    if(board->enpas != 0xFF && (board->attacks[board->tomove][PIECE_PAWN] & (uint64_t) 1 << board->enpas))
         hash ^= hashes[772 + board->enpas % BOARD_LEN];
 
     if(board->tomove == TEAM_WHITE)
