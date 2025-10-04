@@ -379,6 +379,32 @@ static void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t src, bi
     }
 }
 
+static inline bool move_enpaslegal(board_t* board, uint8_t src)
+{
+    team_e team;
+    uint8_t kingpos, cappawn;
+    bitboard_t rookatk, bishopatk, blockers;
+
+    team = board->tomove;
+    cappawn = board->enpas + PAWN_OFFS(!team);
+    kingpos = __builtin_ctzll(board->pboards[team][PIECE_KING]);
+
+    blockers = (board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
+    blockers ^= (bitboard_t) 1 << src;
+    blockers ^= (bitboard_t) 1 << cappawn;
+    blockers ^= (bitboard_t) 1 << board->enpas;
+
+    rookatk = magic_lookup(MAGIC_ROOK, kingpos, blockers);
+    if(rookatk & (board->pboards[!team][PIECE_ROOK] | board->pboards[!team][PIECE_QUEEN]))
+        return false;
+
+    bishopatk = magic_lookup(MAGIC_BISHOP, kingpos, blockers);
+    if(bishopatk & (board->pboards[!team][PIECE_BISHOP] | board->pboards[!team][PIECE_QUEEN]))
+        return false;
+
+    return true;
+}
+
 static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     const bitboard_t promotionmask = 0xFF000000000000FF;
@@ -451,6 +477,9 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     }
 
     if(!moves)
+        return;
+
+    if(!move_enpaslegal(board, src))
         return;
 
     move = src;
