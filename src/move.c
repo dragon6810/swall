@@ -204,14 +204,16 @@ static inline void move_knightthreat(board_t* board, uint8_t kingpos)
 
 void move_findpins(board_t* board)
 {
+    int i;
     dir_e dir;
 
     team_e team;
-    uint8_t kingpos, nblockers;
-    bitboard_t queenmask, rookmask, bishopmask, pinnermask, moves, sweepmask;
+    uint8_t kingpos, nblockers, sqr;
+    bitboard_t queenmask, rookmask, bishopmask, pinnermask, moves, sweepmask, tempmask;
 
-    board->npins = 0;
     board->isthreat = board->dblcheck = false;
+    for(i=0; i<BOARD_AREA; i++)
+        board->pinmasks[i] = UINT64_MAX;
 
     team = board->tomove;
     kingpos = __builtin_ctzll(board->pboards[team][PIECE_KING]);
@@ -258,7 +260,13 @@ void move_findpins(board_t* board)
         if(nblockers != 1)
             continue;
 
-        board->pins[board->npins++] = sweepmask;
+        tempmask = sweepmask;
+        while(tempmask)
+        {
+            sqr = __builtin_ctzll(tempmask);
+            tempmask &= tempmask - 1;
+            board->pinmasks[sqr] = sweepmask;
+        }
     }
 }
 
@@ -313,9 +321,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     uint8_t dst;
     int starttype, stoptype;
     move_t move;
-    bitboard_t srcmask, moves;
-
-    srcmask = (bitboard_t) 1 << src;
+    bitboard_t moves;
 
     moves = 0;
     if(!caponly)
@@ -328,13 +334,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
     if(board->isthreat)
         moves &= board->threat;
-    for(i=0; i<board->npins; i++)
-    {
-        if(!(srcmask & board->pins[i]))
-            continue;
-        moves &= board->pins[i];
-        break;
-    }
+    moves &= board->pinmasks[src];
 
     starttype = stoptype = MOVETYPE_DEFAULT;
     if(moves & promotionmask)
@@ -366,13 +366,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
     if(board->isthreat)
         moves &= board->threat;
-    for(i=0; i<board->npins; i++)
-    {
-        if(!(srcmask & board->pins[i]))
-            continue;
-        moves &= board->pins[i];
-        break;
-    }
+    moves &= board->pinmasks[src];
 
     if(!moves)
         return;
@@ -388,54 +382,35 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
 static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
-    int i;
-
-    bitboard_t srcmask, moves;
-
-    srcmask = (bitboard_t) 1 << src;
+    bitboard_t moves;
 
     moves = knightatk[src];
     if(caponly)
         moves &= board->pboards[!team][PIECE_NONE];
     moves &= ~board->pboards[team][PIECE_NONE];
+
     if(board->isthreat)
         moves &= board->threat;
-
-    for(i=0; i<board->npins; i++)
-    {
-        if(!(srcmask & board->pins[i]))
-            continue;
-        moves &= board->pins[i];
-        break;
-    }
+    moves &= board->pinmasks[src];
 
     move_bitboardtomoves(board, set, src, moves);
 }
 
 static bitboard_t move_getslideratk(board_t* board, magicpiece_e type, uint8_t src, bool caponly)
 {
-    int i;
-
     team_e team;
-    bitboard_t srcmask, moves;
+    bitboard_t moves;
 
     team = board->sqrs[src] >> SQUARE_BITS_TEAM;
-    srcmask = (bitboard_t) 1 << src;
 
     moves = magic_lookup(type, src, board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
     if(caponly)
         moves &= board->pboards[!team][PIECE_NONE];
     moves &= ~board->pboards[team][PIECE_NONE];
+    
     if(board->isthreat)
         moves &= board->threat;
-
-    for(i=0; i<board->npins; i++)
-    {
-        if(!(srcmask & board->pins[i]))
-            continue;
-        moves &= board->pins[i];
-        break;
-    }
+    moves &= board->pinmasks[src];
 
     return moves;
 }

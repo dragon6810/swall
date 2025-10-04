@@ -180,7 +180,6 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
     made->kcastle[1] = board->kcastle[1];
     made->qcastle[0] = board->qcastle[0];
     made->qcastle[1] = board->qcastle[1];
-    made->npins = board->npins;
     made->dblcheck = board->dblcheck;
     made->isthreat = board->isthreat;
     made->threat = board->threat;
@@ -189,7 +188,7 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
     memcpy(made->npiece, board->npiece, sizeof(board->npiece));
     memcpy(made->ptable, board->ptable, sizeof(board->ptable));
     memcpy(made->attacks, board->attacks, sizeof(board->attacks));
-    memcpy(made->pins, board->pins, sizeof(board->pins));
+    memcpy(made->pinmasks, board->pinmasks, sizeof(board->pinmasks));
     memcpy(made->check, board->check, sizeof(board->check));
 
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -206,7 +205,6 @@ static void move_copyfrommade(board_t* board, const mademove_t* made)
     board->kcastle[1] = made->kcastle[1];
     board->qcastle[0] = made->qcastle[0];
     board->qcastle[1] = made->qcastle[1];
-    board->npins = made->npins;
     board->dblcheck = made->dblcheck;
     board->isthreat = made->isthreat;
     board->threat = made->threat;
@@ -215,7 +213,7 @@ static void move_copyfrommade(board_t* board, const mademove_t* made)
     memcpy(board->npiece, made->npiece, sizeof(made->npiece));
     memcpy(board->ptable, made->ptable, sizeof(made->ptable));
     memcpy(board->attacks, made->attacks, sizeof(made->attacks));
-    memcpy(board->pins, made->pins, sizeof(made->pins));
+    memcpy(board->pinmasks, made->pinmasks, sizeof(made->pinmasks));
     memcpy(board->check, made->check, sizeof(made->check));
 }
 

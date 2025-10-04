@@ -61,8 +61,7 @@ typedef struct mademove_s
     uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     bitboard_t attacks[TEAM_COUNT][PIECE_COUNT]; // PIECE_NONE is all pieces
     
-    uint8_t npins;
-    bitboard_t pins[DIR_COUNT];
+    bitboard_t pinmasks[BOARD_AREA];
     bool dblcheck;
     bool isthreat;
     bitboard_t threat;
