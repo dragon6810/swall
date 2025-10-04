@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 import argparse, os, subprocess, sys, time, threading, queue, shutil
 import traceback
+from datetime import datetime
 
 # --- Config ---
 BENCH_DIR    = ".bench"                          # add to .gitignore
 POSITIONS_EP = os.path.join(BENCH_DIR, "positions.epd")
 PGN_DIR      = os.path.join(BENCH_DIR, "pgn")
+CRASH_DIR    = os.path.join(BENCH_DIR, "crashes")
 GAMES        = 100                                # total games cap
-MOVETIME_MS  = 50                                # fixed movetime per move
+MOVETIME_MS  = 50                                 # fixed movetime per move
 
 def log(msg): print(msg, flush=True)
 
@@ -40,6 +42,25 @@ def ensure_file(path, what):
     if not os.path.exists(path):
         raise FileNotFoundError(f"{what} not found: {path}")
 
+def now_stamp():
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+# --- tiny thread-safe event ring for unified transcript (> stdin, < stdout) ---
+class EventRing:
+    def __init__(self, max_events=20000):
+        self._buf = []
+        self._max = max_events
+        self._lock = threading.Lock()
+    def add(self, line: str):
+        # line already includes prefix "> " or "< " and trailing newline
+        with self._lock:
+            self._buf.append(line if line.endswith("\n") else line + "\n")
+            if len(self._buf) > self._max:
+                del self._buf[:len(self._buf) - self._max]
+    def text(self) -> str:
+        with self._lock:
+            return "".join(self._buf)
+
 # ---------- Load positions ----------
 def load_positions(epd_path):
     if not os.path.exists(epd_path):
@@ -60,14 +81,17 @@ def load_positions(epd_path):
 
 # ---------- UCI wrapper ----------
 class Reader(threading.Thread):
-    def __init__(self, proc, log_prefix):
+    def __init__(self, proc, log_prefix, event_sink=None):
         super().__init__(daemon=True)
         self.proc = proc
         self.q = queue.Queue()
         self.log_prefix = log_prefix
+        self.event_sink = event_sink
     def run(self):
         for line in iter(self.proc.stdout.readline, b""):
             s = line.decode(errors="replace")
+            if self.event_sink:
+                self.event_sink.add("< " + s)  # capture stdout
             # log(f"{self.log_prefix} {s.rstrip()}")
             self.q.put(s)
         self.q.put(None)
@@ -75,26 +99,34 @@ class Reader(threading.Thread):
         try: return self.q.get(timeout=timeout)
         except queue.Empty: return None
 
+class EngineCrashed(RuntimeError):
+    def __init__(self, name, returncode, ctx, transcript_text):
+        super().__init__(f"{name} crashed ({returncode}) during {ctx}")
+        self.name = name
+        self.returncode = returncode
+        self.ctx = ctx
+        self.transcript_text = transcript_text
+
 class UCIEngine:
-    def __init__(self, argv, name, workdir):
+    def __init__(self, argv, name, workdir, commit="<unknown>"):
         self.argv = argv
         self.name = name
+        self.commit = commit
         self.workdir = workdir
         self.proc = None
         self.reader = None
+        self.events = EventRing(max_events=40000)  # unified transcript buffer
     def start(self):
         log(f"[{self.name}] start: cwd={self.workdir} cmd={' '.join(self.argv)}")
         self.proc = subprocess.Popen(
             self.argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, cwd=self.workdir, bufsize=0
         )
-        self.reader = Reader(self.proc, f"[{self.name}]")
+        self.reader = Reader(self.proc, f"[{self.name}]", event_sink=self.events)
         self.reader.start()
-        self.send("uci"); self._expect("uciok", 10)
-        # Optional: reproducibility knobs if your engine supports them
-        # self.send("setoption name UseBook value false")
-        # self.send("setoption name Seed value 123456")
-        self.send("isready"); self._expect("readyok", 10)
+        self.send("uci"); self._expect("uciok", 10, ctx="uci handshake")
+        # Tune options here if desired
+        self.send("isready"); self._expect("readyok", 100, ctx="isready")
     def stop(self):
         if self.proc and self.proc.poll() is None:
             try:
@@ -103,15 +135,27 @@ class UCIEngine:
                 self.proc.kill()
         log(f"[{self.name}] stopped")
     def send(self, line):
+        if self.proc.poll() is not None:
+            raise EngineCrashed(self.name, self.proc.returncode, f"send('{line}')", self.events.text())
+        # record stdin into transcript (oldest-first chronologically)
+        self.events.add("> " + line + "\n")
         self.proc.stdin.write((line + "\n").encode()); self.proc.stdin.flush()
-    def _expect(self, token, timeout):
+    def _expect(self, token, timeout, ctx):
         deadline = time.time() + timeout
         while time.time() < deadline:
+            if self.proc.poll() is not None:
+                raise EngineCrashed(self.name, self.proc.returncode, f"expect {token} ({ctx})", self.events.text())
             line = self.reader.readline(timeout=0.1)
-            if line and token in line: return
-        raise RuntimeError(f"{self.name}: timeout waiting for {token}")
+            if line is None:
+                if self.proc.poll() is not None:
+                    raise EngineCrashed(self.name, self.proc.returncode, f"expect {token} ({ctx})", self.events.text())
+                continue
+            if token in line:
+                return
+        # timeout (treat as failure and capture transcript)
+        raise EngineCrashed(self.name, self.proc.returncode if self.proc else None, f"timeout waiting for {token} ({ctx})", self.events.text())
     def newgame(self):
-        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", 10)
+        self.send("ucinewgame"); self.send("isready"); self._expect("readyok", 100, ctx="newgame")
     def bestmove_fen(self, start_fen, moves_uci, movetime_ms):
         if start_fen == "startpos":
             if moves_uci:
@@ -127,13 +171,22 @@ class UCIEngine:
         deadline = time.time() + movetime_ms/1000 + 5
         best = None
         while time.time() < deadline:
+            if self.proc.poll() is not None:
+                raise EngineCrashed(self.name, self.proc.returncode, "go movetime (waiting for bestmove)", self.events.text())
             line = self.reader.readline(timeout=0.2)
-            if line is None: break
+            if line is None:
+                if self.proc.poll() is not None:
+                    raise EngineCrashed(self.name, self.proc.returncode, "go movetime (EOF before bestmove)", self.events.text())
+                continue
             if line.startswith("bestmove"):
                 parts = line.strip().split()
                 if len(parts) >= 2: best = parts[1]
                 break
+        if best is None:
+            raise EngineCrashed(self.name, self.proc.returncode if self.proc else None, "timeout/no bestmove", self.events.text())
         return best
+    def transcript(self) -> str:
+        return self.events.text()
 
 # ---------- Adjudication + PGN ----------
 FILES = "abcdefgh"; RANKS = "12345678"
@@ -153,7 +206,6 @@ def save_pgn(game_id, code, start_fen, moves_uci, white_name, black_name, result
     if not HAVE_PYCHESS:
         log("[warn] python-chess not available; PGN logging skipped.")
         return
-    # Rebuild the game from FEN + UCI moves
     board = _pc.Board() if start_fen == "startpos" else _pc.Board(start_fen)
     for u in moves_uci:
         try:
@@ -161,7 +213,6 @@ def save_pgn(game_id, code, start_fen, moves_uci, white_name, black_name, result
         except Exception:
             break
     game = _pgn.Game.from_board(board)
-    # Basic headers
     game.headers["Event"] = "swall challenger"
     game.headers["Site"]  = "local"
     game.headers["Date"]  = time.strftime("%Y.%m.%d")
@@ -207,12 +258,20 @@ def play_from_fen(engW, engB, start_fen, movetime_ms, max_plies=300):
         return ("1/2-1/2", moves_uci)
 
 def result_code(result_str, a_is_white):
-    # result_str is "1-0", "0-1", or "1/2-1/2"
     if result_str == "1/2-1/2": return "d"
     if result_str == "1-0":
         return "wa" if a_is_white else "wb"
-    else:  # "0-1"
+    else:
         return "wb" if a_is_white else "wa"
+
+def write_crash_log(engine_name, commit, transcript_text, returncode=None):
+    os.makedirs(CRASH_DIR, exist_ok=True)
+    rc_part = f"rc{returncode}" if returncode is not None else "rcNA"
+    # keep all context in filename; file content is ONLY the chronological transcript
+    fname = os.path.join(CRASH_DIR, f"{now_stamp()}-{engine_name}-{commit[:8]}-{rc_part}.log")
+    with open(fname, "w", encoding="utf-8") as f:
+        f.write(transcript_text if transcript_text else "")
+    log(f"[crash] wrote {fname}")
 
 # ---------- Main ----------
 def main():
@@ -253,10 +312,13 @@ def main():
     except Exception as e:
         log("\n[SETUP ERROR]"); log(str(e)); sys.exit(3)
 
-    engA = UCIEngine(["../bin/swall"], "A", workdir=os.path.join(a_dir, "run"))
-    engB = UCIEngine(["../bin/swall"], "B", workdir=os.path.join(b_dir, "run"))
+    engA = UCIEngine(["../bin/swall"], "A", workdir=os.path.join(a_dir, "run"), commit=args.commit_a)
+    engB = UCIEngine(["../bin/swall"], "B", workdir=os.path.join(b_dir, "run"), commit=args.commit_b)
     try:
         engA.start(); engB.start()
+    except EngineCrashed as ec:
+        write_crash_log(ec.name, engA.commit if ec.name == "A" else engB.commit, ec.transcript_text, ec.returncode)
+        log("\n[UCI START ERROR] engine crashed while starting"); sys.exit(4)
     except Exception as e:
         log("\n[UCI START ERROR]"); log(str(e)); log(traceback.format_exc()); sys.exit(4)
 
@@ -266,7 +328,7 @@ def main():
     else:
         log("\nNo positions file found; using startpos")
 
-    # Ensure PGN dir exists
+    # Ensure PGN dir exists and is clean
     if os.path.exists(PGN_DIR):
         for fn in os.listdir(PGN_DIR):
             try:
@@ -275,6 +337,7 @@ def main():
                 pass
     else:
         os.makedirs(PGN_DIR, exist_ok=True)
+    os.makedirs(CRASH_DIR, exist_ok=True)
 
     a_w = b_w = d = 0
     played = 0
@@ -285,7 +348,13 @@ def main():
                 if played >= GAMES: break
 
                 # Game 1: A as White
-                res, moves = play_from_fen(engA, engB, fen, MOVETIME_MS)
+                try:
+                    res, moves = play_from_fen(engA, engB, fen, MOVETIME_MS)
+                except EngineCrashed as ec:
+                    write_crash_log(ec.name,
+                                    engA.commit if ec.name == "A" else engB.commit,
+                                    ec.transcript_text, ec.returncode)
+                    raise
                 played += 1
                 code = result_code(res, a_is_white=True)
                 if res == "1-0": a_w += 1
@@ -297,7 +366,13 @@ def main():
                 if played >= GAMES: break
 
                 # Game 2: B as White
-                res, moves = play_from_fen(engB, engA, fen, MOVETIME_MS)
+                try:
+                    res, moves = play_from_fen(engB, engA, fen, MOVETIME_MS)
+                except EngineCrashed as ec:
+                    write_crash_log(ec.name,
+                                    engA.commit if ec.name == "A" else engB.commit,
+                                    ec.transcript_text, ec.returncode)
+                    raise
                 played += 1
                 code = result_code(res, a_is_white=False)
                 if res == "1-0": b_w += 1
@@ -310,22 +385,31 @@ def main():
             fen = "startpos"
             for g in range(1, GAMES + 1):
                 a_white = (g % 2 == 1)
-                if a_white:
-                    res, moves = play_from_fen(engA, engB, fen, MOVETIME_MS)
-                    code = result_code(res, a_is_white=True)
-                    if res == "1-0": a_w += 1
-                    elif res == "0-1": b_w += 1
-                    else: d += 1
-                    save_pgn(g, code, fen, moves, f"A ({args.commit_a})", f"B ({args.commit_b})", res, args.commit_a, args.commit_b)
-                else:
-                    res, moves = play_from_fen(engB, engA, fen, MOVETIME_MS)
-                    code = result_code(res, a_is_white=False)
-                    if res == "1-0": b_w += 1
-                    elif res == "0-1": a_w += 1
-                    else: d += 1
-                    save_pgn(g, code, fen, moves, f"B ({args.commit_b})", f"A ({args.commit_a})", res, args.commit_a, args.commit_b)
+                try:
+                    if a_white:
+                        res, moves = play_from_fen(engA, engB, fen, MOVETIME_MS)
+                        code = result_code(res, a_is_white=True)
+                        if res == "1-0": a_w += 1
+                        elif res == "0-1": b_w += 1
+                        else: d += 1
+                        save_pgn(g, code, fen, moves, f"A ({args.commit_a})", f"B ({args.commit_b})", res, args.commit_a, args.commit_b)
+                    else:
+                        res, moves = play_from_fen(engB, engA, fen, MOVETIME_MS)
+                        code = result_code(res, a_is_white=False)
+                        if res == "1-0": b_w += 1
+                        elif res == "0-1": a_w += 1
+                        else: d += 1
+                        save_pgn(g, code, fen, moves, f"B ({args.commit_b})", f"A ({args.commit_a})", res, args.commit_a, args.commit_b)
+                except EngineCrashed as ec:
+                    write_crash_log(ec.name,
+                                    engA.commit if ec.name == "A" else engB.commit,
+                                    ec.transcript_text, ec.returncode)
+                    raise
                 played = g
                 log(f"Game {g}/{GAMES}: {res}   (A:{a_w}  D:{d}  B:{b_w})")
+    except EngineCrashed as ec:
+        log(f"[FATAL] {ec}")
+        sys.exit(5)
     finally:
         engA.stop(); engB.stop()
 

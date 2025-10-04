@@ -268,6 +268,24 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     board->tomove = !board->tomove;
     board_update(board);
     (*move_threefold(board))++;
+
+#ifdef PARANOID
+    if(board->check[!board->tomove])
+    {
+        char str[MAX_LONGALG];
+
+        move_tolongalg(move, str);
+
+        printf("moved into check (%s):\n", str);
+        board_print(board);
+
+        printf("before move:\n");
+        move_unmake(board, outmove);
+        board_print(board);
+
+        abort();
+    }
+#endif
 }
 
 // there's a lot of repeated code from move_domove.

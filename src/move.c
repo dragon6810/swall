@@ -170,6 +170,13 @@ void move_findpins(board_t* board)
     bishopmask = board->pboards[!team][PIECE_BISHOP];
     pinnermask = queenmask | rookmask | bishopmask;
 
+    if(kingpos >= BOARD_AREA)
+    {
+    printf("kingpos: %d\n", kingpos);
+    board_printbits(board->pboards[team][PIECE_KING]);
+    board_print(board);
+    }
+
     moves = 0;
     moves |= magic_lookup(MAGIC_ROOK, kingpos, board->pboards[!team][PIECE_NONE]);
     moves |= magic_lookup(MAGIC_BISHOP, kingpos, board->pboards[!team][PIECE_NONE]);
@@ -431,7 +438,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
         }
     }
 
-    if(!board->isenpaspin && (pawnatk[team][src] & ((bitboard_t) 1 << board->enpas)))
+    if(board->enpas < BOARD_AREA && !board->isenpaspin && (pawnatk[team][src] & ((bitboard_t) 1 << board->enpas)))
     {
         move = src;
         move |= (move_t) board->enpas << MOVEBITS_DST_BITS;

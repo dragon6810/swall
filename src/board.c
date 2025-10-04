@@ -46,7 +46,7 @@ void board_findcheck(board_t* board)
         board->check[i] = (board->pboards[i][PIECE_KING] & board->attacks[!i][PIECE_NONE]) != 0;
 }
 
-#define PRINTUNICODE
+// #define PRINTUNICODE
 
 #ifdef PRINTUNICODE
 wint_t piecechars[TEAM_COUNT][PIECE_COUNT] = 
