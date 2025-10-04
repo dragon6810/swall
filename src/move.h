@@ -56,17 +56,6 @@ typedef struct mademove_s
     uint8_t enpas;
     bool kcastle[TEAM_COUNT];
     bool qcastle[TEAM_COUNT];
-
-    uint8_t npiece[TEAM_COUNT];
-    uint8_t ptable[TEAM_COUNT][PIECE_MAX];
-    bitboard_t attacks[TEAM_COUNT][PIECE_COUNT]; // PIECE_NONE is all pieces
-    
-    bitboard_t pinmasks[BOARD_AREA];
-    bool dblcheck;
-    bool isthreat;
-    bitboard_t threat;
-    bool check[TEAM_COUNT];
-
     int fiftymove;
 } mademove_t;
 

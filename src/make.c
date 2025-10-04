@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int16_t* move_threefold(board_t* board)
+static inline int16_t* move_threefold(board_t* board)
 {
     int16_t *pval;
 
@@ -17,7 +17,7 @@ int16_t* move_threefold(board_t* board)
     return zobrist_find(&board->threefold, board->hash);
 }
 
-static void move_docapture(board_t* board, move_t move, mademove_t* made)
+static inline void move_docapture(board_t* board, move_t move, mademove_t* made)
 {
     int dst;
     team_e team;
@@ -39,7 +39,7 @@ static void move_docapture(board_t* board, move_t move, mademove_t* made)
 }
 
 // reversible
-static void move_docastle(board_t* board, move_t move, team_e team)
+static inline void move_docastle(board_t* board, move_t move, team_e team)
 {
     int src, dst;
     int rooksrc, rookdst;
@@ -74,7 +74,7 @@ static void move_docastle(board_t* board, move_t move, team_e team)
     board->pboards[team][PIECE_ROOK] ^= rookmask;
 }
 
-static void move_updatecastlerights(board_t* board, move_t move)
+static inline void move_updatecastlerights(board_t* board, move_t move)
 {
     int src, dst;
     team_e team;
@@ -107,7 +107,7 @@ static void move_updatecastlerights(board_t* board, move_t move)
         board->kcastle[!team] = false;
 }
 
-static void move_updateenpas(board_t* board, move_t move, mademove_t* made)
+static inline void move_updateenpas(board_t* board, move_t move, mademove_t* made)
 {
     int src, dst;
     team_e team;
@@ -127,7 +127,7 @@ static void move_updateenpas(board_t* board, move_t move, mademove_t* made)
         board->enpas = src + PAWN_OFFS(team);
 }
 
-static void move_doenpas(board_t* board, move_t move)
+static inline void move_doenpas(board_t* board, move_t move)
 {
     int type;
     team_e team;
@@ -148,7 +148,7 @@ static void move_doenpas(board_t* board, move_t move)
     board->pboards[!team][PIECE_PAWN] &= ~mask;
 }
 
-static void move_updatefiftymove(board_t* board, move_t move)
+static inline void move_updatefiftymove(board_t* board, move_t move)
 {
     int src, dst;
     piece_e piece;
@@ -180,16 +180,18 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
     made->kcastle[1] = board->kcastle[1];
     made->qcastle[0] = board->qcastle[0];
     made->qcastle[1] = board->qcastle[1];
-    made->dblcheck = board->dblcheck;
-    made->isthreat = board->isthreat;
-    made->threat = board->threat;
+    // made->dblcheck = board->dblcheck;
+    // made->isthreat = board->isthreat;
+    // made->threat = board->threat;
     made->fiftymove = board->fiftymove;
 
+    /*
     memcpy(made->npiece, board->npiece, sizeof(board->npiece));
     memcpy(made->ptable, board->ptable, sizeof(board->ptable));
     memcpy(made->attacks, board->attacks, sizeof(board->attacks));
     memcpy(made->pinmasks, board->pinmasks, sizeof(board->pinmasks));
     memcpy(made->check, board->check, sizeof(board->check));
+    */
 
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     if(board->sqrs[dst])
@@ -205,16 +207,18 @@ static void move_copyfrommade(board_t* board, const mademove_t* made)
     board->kcastle[1] = made->kcastle[1];
     board->qcastle[0] = made->qcastle[0];
     board->qcastle[1] = made->qcastle[1];
-    board->dblcheck = made->dblcheck;
-    board->isthreat = made->isthreat;
-    board->threat = made->threat;
+    // board->dblcheck = made->dblcheck;
+    // board->isthreat = made->isthreat;
+    // board->threat = made->threat;
     board->fiftymove = made->fiftymove;
 
+    /*
     memcpy(board->npiece, made->npiece, sizeof(made->npiece));
     memcpy(board->ptable, made->ptable, sizeof(made->ptable));
     memcpy(board->attacks, made->attacks, sizeof(made->attacks));
     memcpy(board->pinmasks, made->pinmasks, sizeof(made->pinmasks));
     memcpy(board->check, made->check, sizeof(made->check));
+    */
 }
 
 void move_make(board_t* board, move_t move, mademove_t* outmove)
@@ -350,8 +354,6 @@ void move_unmake(board_t* board, const mademove_t* move)
     }
     
     board->tomove = team;
-
     move_copyfrommade(board, move);
-
-    board->hash = zobrist_hash(board);
+    board_update(board);
 }
