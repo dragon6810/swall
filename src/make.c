@@ -269,7 +269,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     board_update(board);
     (*move_threefold(board))++;
 
-#ifdef PARANOID
+#if defined(PARANOID) || 1
     if(board->check[!board->tomove])
     {
         char str[MAX_LONGALG];
