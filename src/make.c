@@ -184,7 +184,6 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
     made->dblcheck = board->dblcheck;
     made->isthreat = board->isthreat;
     made->threat = board->threat;
-    made->isenpaspin = board->isenpaspin;
     made->fiftymove = board->fiftymove;
 
     memcpy(made->npiece, board->npiece, sizeof(board->npiece));
@@ -211,7 +210,6 @@ static void move_copyfrommade(board_t* board, const mademove_t* made)
     board->dblcheck = made->dblcheck;
     board->isthreat = made->isthreat;
     board->threat = made->threat;
-    board->isenpaspin = made->isenpaspin;
     board->fiftymove = made->fiftymove;
 
     memcpy(board->npiece, made->npiece, sizeof(made->npiece));

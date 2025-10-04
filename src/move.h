@@ -66,7 +66,6 @@ typedef struct mademove_s
     bool dblcheck;
     bool isthreat;
     bitboard_t threat;
-    bool isenpaspin;
     bool check[TEAM_COUNT];
 
     int fiftymove;
@@ -76,8 +75,8 @@ void move_tolongalg(move_t move, char str[MAX_LONGALG]);
 void move_make(board_t* board, move_t move, mademove_t* outmove);
 void move_unmake(board_t* board, const mademove_t* move);
 void move_findattacks(board_t* board);
+// also finds threats
 void move_findpins(board_t* board);
-void move_findthreats(board_t* board);
 // moves can be NULL
 void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly);
 // every legal move for every piece of whoever's turn it is

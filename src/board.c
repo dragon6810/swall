@@ -382,7 +382,6 @@ void board_update(board_t* board)
     board_findpieces(board);
     move_findattacks(board);
     move_findpins(board);
-    move_findthreats(board);
     board_findcheck(board);
     board->hash = zobrist_hash(board);
     board_checkstalemate(board);

@@ -75,7 +75,6 @@ typedef struct board_s
     bool dblcheck;
     bool isthreat;
     bitboard_t threat;
-    bool isenpaspin; // performing en passant would put the king in check.
     
     team_e tomove;
     bool check[TEAM_COUNT];
