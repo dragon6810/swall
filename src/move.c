@@ -8,12 +8,14 @@
 
 #include "magic.h"
 
-int sweeptable[BOARD_AREA][DIR_COUNT] = {};
-bitboard_t kingatk[BOARD_AREA] = {};
-bitboard_t knightatk[BOARD_AREA] = {};
-bitboard_t pawnatk[TEAM_COUNT][BOARD_AREA] = {};
-bitboard_t pawnpush[TEAM_COUNT][BOARD_AREA] = {};
-bitboard_t pawndbl[TEAM_COUNT][BOARD_AREA] = {};
+int sweeptable[BOARD_AREA][DIR_COUNT];
+
+bitboard_t kingatk[BOARD_AREA];
+bitboard_t knightatk[BOARD_AREA];
+bitboard_t pawnatk[TEAM_COUNT][BOARD_AREA];
+bitboard_t pawnpush[TEAM_COUNT][BOARD_AREA];
+bitboard_t pawndbl[TEAM_COUNT][BOARD_AREA];
+bitboard_t emptysweeps[BOARD_AREA][DIR_COUNT];
 
 void move_tolongalg(move_t move, char str[MAX_LONGALG])
 {
@@ -150,37 +152,56 @@ void move_findattacks(board_t* board)
     }
 }
 
-static void move_sweepthreat(board_t* board, team_e team, dir_e dir, uint8_t src)
+void move_findpins(board_t* board)
 {
-    int i;
+    dir_e dir;
 
-    int idx;
-    int max;
-    bitboard_t line;
-    bitboard_t imask;
+    team_e team;
+    uint8_t kingpos, nblockers;
+    bitboard_t queenmask, rookmask, bishopmask, pinnermask, moves, sweepmask;
 
-    line = 0;
+    board->isenpaspin = false;
+    board->npins = 0;
 
-    max = sweeptable[src][dir];
-    for(i=0, idx=src; i<=max; i++, idx+=diroffs[dir])
-    {
-        imask = (uint64_t) 1 << idx;
-        line |= imask;
+    team = board->tomove;
+    kingpos = __builtin_ctzll(board->pboards[team][PIECE_KING]);
+    queenmask = board->pboards[!team][PIECE_QUEEN];
+    rookmask = board->pboards[!team][PIECE_ROOK];
+    bishopmask = board->pboards[!team][PIECE_BISHOP];
+    pinnermask = queenmask | rookmask | bishopmask;
 
-        if(!i)
-            continue;
+    moves = 0;
+    moves |= magic_lookup(MAGIC_ROOK, kingpos, board->pboards[!team][PIECE_NONE]);
+    moves |= magic_lookup(MAGIC_BISHOP, kingpos, board->pboards[!team][PIECE_NONE]);
 
-        if(!((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & imask))
-            continue;
-
-        if(board->pboards[board->tomove][PIECE_KING] & imask)
-            break;
-
+    if(!(moves & pinnermask))
         return;
-    }
 
-    // edge of the board and no king
-    if(i > max)
+    for(dir=0; dir<DIR_COUNT; dir++)
+    {
+        sweepmask = emptysweeps[kingpos][dir] & moves;
+
+        if(dir < DIR_NE && !(sweepmask & rookmask) && !(sweepmask & queenmask))
+            continue;
+        if(dir >= DIR_NE && !(sweepmask & bishopmask) && !(sweepmask & queenmask))
+            continue;
+
+        // we actually hit a queen, rook, or bishop, but we could have multiple or no pieces in the way
+        nblockers = __builtin_popcountll(sweepmask & board->pboards[team][PIECE_NONE]);
+
+        if(nblockers != 1)
+            continue;
+
+        board->pins[board->npins++] = sweepmask;
+    }
+}
+
+static void move_pawnthreat(board_t* board, uint8_t src, team_e team)
+{
+    bitboard_t moves;
+
+    moves = pawnatk[team][src];
+    if(!(moves & board->pboards[!team][PIECE_KING]))
         return;
 
     if(board->isthreat)
@@ -190,143 +211,10 @@ static void move_sweepthreat(board_t* board, team_e team, dir_e dir, uint8_t src
     }
 
     board->isthreat = true;
-    board->threat = line;
+    board->threat = (uint64_t) 1 << src;
 }
 
-static void move_sweeppin(board_t* board, team_e team, dir_e dir, uint8_t src)
-{
-    int i;
-
-    int idx;
-    int max;
-    bitboard_t line;
-    int nblocks;
-    int dblpushed;
-    bitboard_t enpasatkmask;
-    bool maybenepas;
-    bool isenpas;
-
-    bitboard_t imask;
-
-    dblpushed = -1;
-    enpasatkmask = 0;
-    if(board->enpas != 0xFF)
-    {
-        dblpushed = board->enpas + PAWN_OFFS(team);
-        if(dblpushed % BOARD_LEN)
-            enpasatkmask |= (uint64_t) 1 << (dblpushed - 1);
-        if(dblpushed % BOARD_LEN != BOARD_LEN - 1)
-            enpasatkmask |= (uint64_t) 1 << (dblpushed + 1);
-        enpasatkmask &= board->pboards[!team][PIECE_PAWN];
-    }
-
-    // 1 bit set, so there is exactly one pawn attacking the double pushed pawn
-    maybenepas = enpasatkmask && !(enpasatkmask & (enpasatkmask - 1));
-    isenpas = false;
-
-    line = 0;
-    nblocks = 0;
-
-    max = sweeptable[src][dir];
-    for(i=0, idx=src; i<=max; i++, idx+=diroffs[dir])
-    {
-        imask = (uint64_t) 1 << idx;
-        line |= imask;
-
-        if(!i)
-            continue;
-
-        if(!((board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) & imask))
-            continue;
-
-        // hit a friendly!
-        if(board->pboards[team][PIECE_NONE] & imask)
-        {
-            // this is the double pushed pawn, and it can be en passanted
-            if(idx == dblpushed && maybenepas)
-            {
-                isenpas = true;
-                continue;
-            }
-            
-            return;
-        }
-
-        // enemy king, end of pin.
-        if(board->pboards[!team][PIECE_KING] & imask)
-            break;
-
-        if(nblocks)
-            return; // two enemies before the king
-        nblocks++;
-    }
-
-    if(!nblocks)
-        return;
-    
-
-    // edge of the board and no king
-    if(i > max)
-        return;
-
-    if(isenpas)
-    {
-        board->isenpaspin = true;
-        return;
-    }
-
-    if(board->npins >= PIECE_MAX)
-    {
-        printf("move_sweeppin: max pins reached! max is %d.\n", PIECE_MAX);
-        exit(1);
-    }
-
-    board->pins[board->npins++] = line;
-}
-
-static void move_pawnthreat(board_t* board, team_e team, uint8_t src)
-{
-    int i;
-
-    int dst;
-    bitboard_t dstmask;
-    dir_e dirs[2];
-
-    if(team == TEAM_WHITE)
-    {
-        dirs[0] = DIR_NW;
-        dirs[1] = DIR_NE;
-    }
-    else
-    {
-        dirs[0] = DIR_SW;
-        dirs[1] = DIR_SE;
-    }
-
-    for(i=0; i<2; i++)
-    {
-        dst = src + diroffs[dirs[i]];
-        if(abs(dst / BOARD_LEN - src / BOARD_LEN) != 1)
-            continue;
-
-        dstmask = (uint64_t) 1 << dst;
-        if(!(dstmask & board->pboards[!team][PIECE_KING]))
-            continue;
-
-        if(board->isthreat)
-        {
-            board->dblcheck = true;
-            return;
-        }
-
-        board->isthreat = true;
-        board->threat = (uint64_t) 1 << src;
-
-        break;
-    }
-}
-
-static void move_knightthreat(board_t* board, team_e team, uint8_t src)
+static void move_knightthreat(board_t* board, uint8_t src, team_e team)
 {
     bitboard_t moves;
 
@@ -344,35 +232,97 @@ static void move_knightthreat(board_t* board, team_e team, uint8_t src)
     board->threat = (uint64_t) 1 << src;
 }
 
-void move_findpins(board_t* board)
+static void move_bishopthreat(board_t* board, uint8_t src, team_e team)
 {
-    int i;
-    dir_e dir;
+    dir_e d;
 
-    bitboard_t pmask;
+    bitboard_t mask;
 
-    board->isenpaspin = false;
+    mask = magic_lookup(MAGIC_BISHOP, src, board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
 
-        board->npins = 0;
-        for(i=0; i<board->npiece[!board->tomove]; i++)
+    if(!(mask & board->pboards[!team][PIECE_KING]))
+        return;
+
+    for(d=DIR_NE; d<DIR_COUNT; d++)
+    {
+        if(!(emptysweeps[src][d] & board->pboards[!team][PIECE_KING]))
+            continue;
+        
+        if(board->isthreat)
         {
-            pmask = (uint64_t) 1 << board->ptable[!board->tomove][i];
-
-            if(board->pboards[!board->tomove][PIECE_QUEEN] & pmask)
-                for(dir=0; dir<DIR_COUNT; dir++) move_sweeppin(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
-            else if(board->pboards[!board->tomove][PIECE_ROOK] & pmask)
-                for(dir=0; dir<DIR_NE; dir++) move_sweeppin(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
-            else if(board->pboards[!board->tomove][PIECE_BISHOP] & pmask)
-                for(dir=DIR_NE; dir<DIR_COUNT; dir++) move_sweeppin(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
+            board->dblcheck = true;
+            return;
         }
+
+        board->isthreat = true;
+        board->threat = (mask & emptysweeps[src][d]) | ((bitboard_t) 1 << src);
+        return;
+    }
+}
+
+static void move_rookthreat(board_t* board, uint8_t src, team_e team)
+{
+    dir_e d;
+
+    bitboard_t mask;
+
+    mask = magic_lookup(MAGIC_ROOK, src, board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
+
+    if(!(mask & board->pboards[!team][PIECE_KING]))
+        return;
+
+    for(d=0; d<DIR_NE; d++)
+    {
+        if(!(emptysweeps[src][d] & board->pboards[!team][PIECE_KING]))
+            continue;
+        
+        if(board->isthreat)
+        {
+            board->dblcheck = true;
+            return;
+        }
+
+        board->isthreat = true;
+        board->threat = (mask & emptysweeps[src][d]) | ((bitboard_t) 1 << src);
+        return;
+    }
+}
+
+static void move_queenthreat(board_t* board, uint8_t src, team_e team)
+{
+    dir_e d;
+
+    bitboard_t mask;
+
+    mask = 0;
+    mask |= magic_lookup(MAGIC_ROOK, src, board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
+    mask |= magic_lookup(MAGIC_BISHOP, src, board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]);
+
+    if(!(mask & board->pboards[!team][PIECE_KING]))
+        return;
+
+    for(d=0; d<DIR_COUNT; d++)
+    {
+        if(!(emptysweeps[src][d] & board->pboards[!team][PIECE_KING]))
+            continue;
+        
+        if(board->isthreat)
+        {
+            board->dblcheck = true;
+            return;
+        }
+
+        board->isthreat = true;
+        board->threat = (mask & emptysweeps[src][d]) | ((bitboard_t) 1 << src);
+        return;
+    }
 }
 
 void move_findthreats(board_t* board)
 {
     int i;
-    dir_e dir;
 
-    bitboard_t pmask;
+    piece_e p;
 
     board->dblcheck = false;
     board->isthreat = false;
@@ -383,18 +333,33 @@ void move_findthreats(board_t* board)
 
     for(i=0; i<board->npiece[!board->tomove]; i++)
     {
-        pmask = (uint64_t) 1 << board->ptable[!board->tomove][i];
+        p = board->sqrs[board->ptable[!board->tomove][i]] & SQUARE_MASK_TYPE;
+        if(!(board->attacks[!board->tomove][p] & board->pboards[board->tomove][PIECE_KING]))
+            continue;
 
-        if(board->pboards[!board->tomove][PIECE_QUEEN] & pmask)
-            for(dir=0; dir<DIR_COUNT; dir++) move_sweepthreat(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
-        else if(board->pboards[!board->tomove][PIECE_ROOK] & pmask)
-            for(dir=0; dir<DIR_NE; dir++) move_sweepthreat(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
-        else if(board->pboards[!board->tomove][PIECE_BISHOP] & pmask)
-            for(dir=DIR_NE; dir<DIR_COUNT; dir++) move_sweepthreat(board, !board->tomove, dir, board->ptable[!board->tomove][i]);
-        else if(board->pboards[!board->tomove][PIECE_KNIGHT] & pmask)
-            move_knightthreat(board, !board->tomove, board->ptable[!board->tomove][i]);
-        else if(board->pboards[!board->tomove][PIECE_PAWN] & pmask)
-            move_pawnthreat(board, !board->tomove, board->ptable[!board->tomove][i]);
+        switch(p)
+        {
+        case PIECE_QUEEN:
+            move_queenthreat(board, board->ptable[!board->tomove][i], !board->tomove);
+            break;
+        case PIECE_ROOK:
+            move_rookthreat(board, board->ptable[!board->tomove][i], !board->tomove);
+            break;
+        case PIECE_BISHOP:
+            move_bishopthreat(board, board->ptable[!board->tomove][i], !board->tomove);
+            break;
+        case PIECE_KNIGHT:
+            move_knightthreat(board, board->ptable[!board->tomove][i], !board->tomove);
+            break;
+        case PIECE_PAWN:
+            move_pawnthreat(board, board->ptable[!board->tomove][i], !board->tomove);
+            break;
+        default:
+            break;
+        }
+
+        if(board->dblcheck)
+            break;
     }
 }
 
@@ -678,6 +643,27 @@ void move_printset(moveset_t* set)
     }
 }
 
+static void move_emptysweeps(uint8_t src)
+{
+    int i;
+    dir_e d;
+
+    int square;
+    bitboard_t sweep;
+
+    for(d=0; d<DIR_COUNT; d++)
+    {
+        sweep = 0;
+        for(i=1; i<=sweeptable[src][d]; i++)
+        {
+            square = src + diroffs[d] * i;
+            sweep |= (bitboard_t) 1 << square;
+        }
+
+        emptysweeps[src][d] = sweep;
+    }
+}
+
 static void move_pawnboards(uint8_t src)
 {
     int i;
@@ -836,5 +822,6 @@ void move_init(void)
         kingatk[i] = move_kingboard(i);
         knightatk[i] = move_knightboard(i);
         move_pawnboards(i);
+        move_emptysweeps(i);
     }
 }
