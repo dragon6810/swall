@@ -162,7 +162,7 @@ static inline void move_pawnthreat(board_t* board, uint8_t kingpos)
 
     team = board->tomove;
 
-    mask = pawnatk[!team][kingpos] & board->pboards[!team][PIECE_PAWN];
+    mask = pawnatk[team][kingpos] & board->pboards[!team][PIECE_PAWN];
 
     if(!mask)
         return;
@@ -176,7 +176,6 @@ static inline void move_pawnthreat(board_t* board, uint8_t kingpos)
     board->isthreat = true;
     board->threat = mask;
 }
-
 
 static inline void move_knightthreat(board_t* board, uint8_t kingpos)
 {
