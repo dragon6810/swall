@@ -61,20 +61,21 @@ typedef struct mademove_s
 
     uint8_t enpas;
     uint8_t castle; // KQkq
-    int fiftymove;
+    uint8_t fiftymove;
     uint16_t lastperm;
 
     bitboard_t attacks;
+    uint64_t oldhash;
 } mademove_t;
 
 void move_tolongalg(move_t move, char str[MAX_LONGALG]);
-void move_make(board_t* board, move_t move, mademove_t* outmove);
-void move_unmake(board_t* board, const mademove_t* move);
-void move_findattacks(board_t* board);
+void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmove);
+void move_unmake(board_t* restrict board, const mademove_t* restrict move);
+void move_findattacks(board_t* restrict board);
 // also finds threats
 void move_findpins(board_t* board);
 // every legal move for every piece of whoever's turn it is
-void move_alllegal(board_t* board, moveset_t* outmoves, bool caponly);
+void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool caponly);
 // ignores input flags, fills output flags
 move_t* move_findmove(moveset_t* set, move_t move);
 void move_printset(moveset_t* set);

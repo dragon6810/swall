@@ -100,10 +100,7 @@ void board_print(const board_t* board)
     c = 0;
     i = c;
 
-    printf("  ");
-    for(i=0; i<BOARD_LEN; i++)
-        printf("  %c ", 'a' + i);
-    printf("\n  ");
+    printf("\n ");
 
     for(i=0; i<BOARD_LEN; i++)
         printf("+---");
@@ -111,7 +108,7 @@ void board_print(const board_t* board)
 
     for(r=BOARD_LEN-1; r>=0; r--)
     {
-        printf("%d ", r + 1);
+        printf(" ");
         for(f=0; f<BOARD_LEN; f++)
         {
             i = r * BOARD_LEN + f;
@@ -126,11 +123,18 @@ void board_print(const board_t* board)
 #endif
         }
 
-        printf("|\n  ");
+        printf("| %d\n ", r + 1);
         for(f=0; f<BOARD_LEN; f++)
             printf("+---");
         printf("+\n");
     }
+
+    printf("  ");
+    for(i=0; i<BOARD_LEN; i++)
+        printf("  %c ", 'a' + i);
+    printf("\n\n");
+
+    printf("Key: 0x%016llX\n", board->hash);
 }
 
 void board_printbits(const bitboard_t bits)
@@ -382,7 +386,6 @@ void board_update(board_t* board)
 {
     board_findpieces(board);
     move_findattacks(board);
-    move_findpins(board);
     board_findcheck(board);
     board->hash = zobrist_hash(board);
     board_checkstalemate(board);

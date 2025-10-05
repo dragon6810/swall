@@ -252,7 +252,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         ext = brain_calcext(board, moves.moves[i], next);
 
         needsfullsearch = true;
-        if(i > 2 && depth - 1 > 2 && !ext && !capture)
+        if(i > 2 && depth > 3 && !ext && !capture)
         {
             eval = -search_r(board, -beta, -alpha, plies + 1, depth - 2, next - ext, NULL);
             needsfullsearch = eval > alpha;

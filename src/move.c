@@ -49,17 +49,17 @@ void move_tolongalg(move_t move, char str[MAX_LONGALG])
     str[5] = 0;
 }
 
-static inline void move_pawnatk(board_t* board, uint8_t src, team_e team)
+static inline void move_pawnatk(board_t* restrict board, uint8_t src, team_e team)
 {
     board->attacks |= pawnatk[team][src];
 }
 
-static inline void move_knightatk(board_t* board, uint8_t src, team_e team)
+static inline void move_knightatk(board_t* restrict board, uint8_t src, team_e team)
 {
     board->attacks |= knightatk[src];
 }
 
-static inline void move_bishopatk(board_t* board, uint8_t src, team_e team)
+static inline void move_bishopatk(board_t* restrict board, uint8_t src, team_e team)
 {
     bitboard_t block;
 
@@ -67,7 +67,7 @@ static inline void move_bishopatk(board_t* board, uint8_t src, team_e team)
     board->attacks |= magic_lookup(MAGIC_BISHOP, src, block);
 }
 
-static inline void move_rookatk(board_t* board, uint8_t src, team_e team)
+static inline void move_rookatk(board_t* restrict board, uint8_t src, team_e team)
 {
     bitboard_t block;
 
@@ -75,7 +75,7 @@ static inline void move_rookatk(board_t* board, uint8_t src, team_e team)
     board->attacks |= magic_lookup(MAGIC_ROOK, src, block);
 }
 
-static inline void move_queenatk(board_t* board, uint8_t src, team_e team)
+static inline void move_queenatk(board_t* restrict board, uint8_t src, team_e team)
 {
     bitboard_t block;
 
@@ -83,12 +83,12 @@ static inline void move_queenatk(board_t* board, uint8_t src, team_e team)
     board->attacks |= magic_lookup(MAGIC_ROOK, src, block) | magic_lookup(MAGIC_BISHOP, src, block);
 }
 
-static inline void move_kingatk(board_t* board, uint8_t src, team_e team)
+static inline void move_kingatk(board_t* restrict board, uint8_t src, team_e team)
 {
     board->attacks |= kingatk[src];
 }
 
-void move_findattacks(board_t* board)
+void move_findattacks(board_t* restrict board)
 {
     int i;
 
@@ -125,7 +125,7 @@ void move_findattacks(board_t* board)
     }
 }
 
-static inline void move_pawnthreat(board_t* board, uint8_t kingpos)
+static inline void move_pawnthreat(board_t* restrict board, uint8_t kingpos)
 {
     team_e team;
     bitboard_t mask;
@@ -150,7 +150,7 @@ static inline void move_pawnthreat(board_t* board, uint8_t kingpos)
     board->threat = mask;
 }
 
-static inline void move_knightthreat(board_t* board, uint8_t kingpos)
+static inline void move_knightthreat(board_t* restrict board, uint8_t kingpos)
 {
     team_e team;
     bitboard_t mask;
@@ -175,7 +175,7 @@ static inline void move_knightthreat(board_t* board, uint8_t kingpos)
     board->threat = mask;
 }
 
-void move_findpins(board_t* board)
+void move_findpins(board_t* restrict board)
 {
     int i;
     dir_e dir;
@@ -238,7 +238,7 @@ void move_findpins(board_t* board)
     }
 }
 
-static inline void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t src, bitboard_t moves)
+static inline void move_bitboardtomoves(board_t* restrict board, moveset_t* restrict set, uint8_t src, bitboard_t moves)
 {
     uint8_t dst;
     move_t move;
@@ -254,7 +254,7 @@ static inline void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t 
     }
 }
 
-static inline bool move_enpaslegal(board_t* board, uint8_t src)
+static inline bool move_enpaslegal(board_t* restrict board, uint8_t src)
 {
     team_e team;
     uint8_t kingpos, cappawn;
@@ -280,7 +280,7 @@ static inline bool move_enpaslegal(board_t* board, uint8_t src)
     return true;
 }
 
-static inline void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_pawnmoves(moveset_t* restrict set, board_t* restrict board, uint8_t src, team_e team, bool caponly)
 {
     const bitboard_t promotionmask = 0xFF000000000000FF;
 
@@ -348,7 +348,7 @@ static inline void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, t
     set->moves[set->count++] = move;
 }
 
-static inline void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_knightmoves(moveset_t* restrict set, board_t* restrict board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -364,7 +364,7 @@ static inline void move_knightmoves(moveset_t* set, board_t* board, uint8_t src,
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static inline bitboard_t move_getslideratk(board_t* board, magicpiece_e type, uint8_t src, bool caponly)
+static inline bitboard_t move_getslideratk(board_t* restrict board, magicpiece_e type, uint8_t src, bool caponly)
 {
     team_e team;
     bitboard_t moves;
@@ -383,7 +383,7 @@ static inline bitboard_t move_getslideratk(board_t* board, magicpiece_e type, ui
     return moves;
 }
 
-static inline void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_bishopmoves(moveset_t* restrict set, board_t* restrict board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -391,7 +391,7 @@ static inline void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src,
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static inline void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_rookmoves(moveset_t* restrict set, board_t* restrict board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -399,7 +399,7 @@ static inline void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, t
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static inline void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_queenmoves(moveset_t* restrict set, board_t* restrict board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -407,7 +407,7 @@ static inline void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, 
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static inline void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_kingmoves(moveset_t* restrict set, board_t* restrict board, uint8_t src, team_e team, bool caponly)
 {
     uint8_t dst;
     bitboard_t moves;
@@ -448,7 +448,7 @@ static inline void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, t
     }
 }
 
-static inline void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
+static inline void move_legalmoves(board_t* restrict board, moveset_t* restrict moves, uint8_t src, bool caponly)
 {
     piece_e piece;
 
@@ -486,11 +486,18 @@ static inline void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src
     }
 }
 
-void move_alllegal(board_t* board, moveset_t* outmoves, bool caponly)
+void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool caponly)
 {
     int i;
 
+    move_findattacks(board);
+    board_findcheck(board);
+    move_findpins(board);
+
     outmoves->count = 0;
+    if(board->stalemate)
+        return;
+        
     for(i=0; i<board->npiece[board->tomove]; i++)
         move_legalmoves(board, outmoves, board->ptable[board->tomove][i], caponly);
 }

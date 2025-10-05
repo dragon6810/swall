@@ -69,9 +69,9 @@ typedef struct board_s
     uint16_t lastperm; // last permenant history move, e.g. pawn push or capture
     uint64_t history[MAX_GAME_PLIES];
     uint64_t hash;
-    
+
     bool stalemate;
-    int fiftymove;
+    uint8_t fiftymove;
 
     bitboard_t attacks; // of !tomove
     bitboard_t pinmasks[BOARD_AREA];

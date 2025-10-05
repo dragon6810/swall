@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static inline void move_docapture(board_t* board, move_t move, mademove_t* made)
+static inline void move_docapture(board_t* restrict board, move_t move, mademove_t* restrict made)
 {
     int dst;
     team_e team;
@@ -27,7 +27,7 @@ static inline void move_docapture(board_t* board, move_t move, mademove_t* made)
 }
 
 // reversible
-static inline void move_docastle(board_t* board, move_t move, team_e team)
+static inline void move_docastle(board_t* restrict board, move_t move, team_e team)
 {
     int src, dst;
     int rooksrc, rookdst;
@@ -62,7 +62,7 @@ static inline void move_docastle(board_t* board, move_t move, team_e team)
     board->pboards[team][PIECE_ROOK] ^= rookmask;
 }
 
-static inline void move_updatecastlerights(board_t* board, move_t move)
+static inline void move_updatecastlerights(board_t* restrict board, move_t move)
 {
     int src, dst;
     team_e team;
@@ -79,23 +79,45 @@ static inline void move_updatecastlerights(board_t* board, move_t move)
     ourrank = team == TEAM_BLACK ? BOARD_LEN - 1 : 0;
 
     if(piece == PIECE_KING)
+    {
+        if(board->kcastle[team])
+            board->hash ^= zobrist_hashes[768 + team * 2];
+        if(board->qcastle[team])
+            board->hash ^= zobrist_hashes[769 + team * 2];
         board->kcastle[team] = board->qcastle[team] = false;
+    }
 
     else if(piece == PIECE_ROOK && src % BOARD_LEN == 0 && src / BOARD_LEN == ourrank)
+    {
+        if(board->qcastle[team])
+            board->hash ^= zobrist_hashes[769 + team * 2];
         board->qcastle[team] = false;
+    }
     else if(piece == PIECE_ROOK && src % BOARD_LEN == BOARD_LEN - 1 && src / BOARD_LEN == ourrank)
+    {
+        if(board->kcastle[team])
+            board->hash ^= zobrist_hashes[768 + team * 2];
         board->kcastle[team] = false;
+    }
 
     if(capture != PIECE_ROOK || dst / BOARD_LEN != enemyrank)
         return;
 
     if(dst % BOARD_LEN == 0)
+    {
+        if(board->qcastle[!team])
+            board->hash ^= zobrist_hashes[769 + !team * 2];
         board->qcastle[!team] = false;
+    }
     else if(dst % BOARD_LEN == BOARD_LEN - 1)
+    {
+        if(board->kcastle[!team])
+            board->hash ^= zobrist_hashes[768 + !team * 2];
         board->kcastle[!team] = false;
+    }
 }
 
-static inline void move_updateenpas(board_t* board, move_t move, mademove_t* made)
+static inline void move_updateenpas(board_t* restrict board, move_t move, mademove_t* made)
 {
     int src, dst;
     team_e team;
@@ -115,7 +137,7 @@ static inline void move_updateenpas(board_t* board, move_t move, mademove_t* mad
         board->enpas = src + PAWN_OFFS(team);
 }
 
-static inline void move_doenpas(board_t* board, move_t move)
+static inline void move_doenpas(board_t* restrict board, move_t move)
 {
     int type;
     team_e team;
@@ -136,7 +158,7 @@ static inline void move_doenpas(board_t* board, move_t move)
     board->pboards[!team][PIECE_PAWN] &= ~mask;
 }
 
-static inline void move_updatefiftymove(board_t* board, move_t move)
+static inline void move_updatefiftymove(board_t* restrict board, move_t move)
 {
     int src, dst;
     piece_e piece;
@@ -157,7 +179,62 @@ clear:
     board->fiftymove = 0;
 }
 
-static void move_copytomade(board_t* board, move_t move, mademove_t* made)
+static inline void move_makehash(board_t* restrict board, move_t move)
+{
+    team_e team;
+    movetype_e type;
+    int8_t src, dst, rooka, rookb;
+    piece_e piece, newtype, capture;
+
+    team = board->tomove;
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+
+    piece = board->sqrs[src] & SQUARE_MASK_TYPE;
+    capture = board->sqrs[dst] & SQUARE_MASK_TYPE;
+    newtype = piece;
+    if(type >= MOVETYPE_PROMQ && type <= MOVETYPE_PROMN)
+        newtype = PIECE_QUEEN + type - MOVETYPE_PROMQ;
+
+    board->hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[team][piece] + src];
+    if(capture)
+        board->hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[!team][capture] + dst];
+
+    board->hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[team][newtype] + dst];
+
+    if(type == MOVETYPE_ENPAS)
+        board->hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[!team][PIECE_PAWN] + board->enpas + PAWN_OFFS(!team)];
+    
+    if(type == MOVETYPE_CASTLE)
+    {
+        // queenside
+        if(dst < src)
+        {
+            rooka = dst - 2;
+            rookb = dst + 1;
+        }
+        else
+        {
+            rooka = dst - 1;
+            rookb = dst + 1;
+        }
+
+        board->hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[team][PIECE_ROOK] + rooka];
+        board->hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[team][PIECE_ROOK] + rookb];
+    }
+
+    if(board->enpas != 0xFF && (board->pboards[board->tomove][PIECE_PAWN] & pawnatk[!board->tomove][board->enpas]))
+        board->hash ^= zobrist_hashes[772 + board->enpas % BOARD_LEN];
+
+    if(piece == PIECE_PAWN && abs(dst - src) == BOARD_LEN * 2 
+    && board->pboards[!team][PIECE_PAWN] & pawnatk[team][src + PAWN_OFFS(team)])
+        board->hash ^= zobrist_hashes[772 + dst % BOARD_LEN];
+
+    board->hash ^= zobrist_hashes[780];
+}
+
+static inline void move_copytomade(board_t* restrict board, move_t move, mademove_t* restrict made)
 {
     int dst;
 
@@ -172,6 +249,7 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
     made->lastperm = board->lastperm;
 
     made->attacks = board->attacks;
+    made->oldhash = board->hash;
 
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     if(board->sqrs[dst])
@@ -180,7 +258,7 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
         made->captured = 0;
 }
 
-static void move_copyfrommade(board_t* board, const mademove_t* made)
+static inline void move_copyfrommade(board_t* restrict board, const mademove_t* restrict made)
 {
     board->enpas = made->enpas;
     board->kcastle[TEAM_WHITE] = made->castle >> 3 & 1;
@@ -192,7 +270,7 @@ static void move_copyfrommade(board_t* board, const mademove_t* made)
     board->attacks = made->attacks;
 }
 
-static inline void move_updatelastperm(board_t* board, move_t move)
+static inline void move_updatelastperm(board_t* restrict board, move_t move)
 {
     int src, dst;
     piece_e piece;
@@ -206,7 +284,7 @@ static inline void move_updatelastperm(board_t* board, move_t move)
         board->lastperm = board->nhistory;
 }
 
-void move_make(board_t* board, move_t move, mademove_t* outmove)
+void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmove)
 {
     int type, src, dst;
     team_e team;
@@ -224,6 +302,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     ptype = board->sqrs[src] & SQUARE_MASK_TYPE;
 
     move_copytomade(board, move, outmove);
+    move_makehash(board, move);
     move_updatelastperm(board, move);
     move_updatefiftymove(board, move);
     move_doenpas(board, move);
@@ -252,13 +331,14 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     board->pboards[team][newtype] |= dstmask;
 
     board->tomove = !board->tomove;
-    board_update(board);
+    board_findpieces(board);
+    board_checkstalemate(board);
     board->history[board->nhistory++] = board->hash;
 }
 
 // there's a lot of repeated code from move_domove.
 // maybe figure out how to generalize this.
-void move_unmake(board_t* board, const mademove_t* move)
+void move_unmake(board_t* restrict board, const mademove_t* restrict move)
 {
     int type, src, dst;
     team_e team;
@@ -315,8 +395,6 @@ void move_unmake(board_t* board, const mademove_t* move)
     board->nhistory--;
 
     board_findpieces(board);
-    move_findpins(board);
-    board_findcheck(board);
-    board->hash = zobrist_hash(board);
+    board->hash = move->oldhash;
     board_checkstalemate(board);
 }

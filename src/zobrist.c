@@ -9,7 +9,7 @@
 #include "move.h"
 
 #define U64(n) n##ULL
-const uint64_t hashes[781] = {
+const uint64_t zobrist_hashes[781] = {
    U64(0x9D39247E33776D41), U64(0x2AF7398005AAA5C7), U64(0x44DB015024623547), U64(0x9C15F73E62A76AE2),
    U64(0x75834465489C0C89), U64(0x3290AC3A203001BF), U64(0x0FBBAD1F61042279), U64(0xE83A908FF2FB60CA),
    U64(0x0D7E765D58755C10), U64(0x1A083822CEAFE02D), U64(0x9605D5F0E25EC3B0), U64(0xD021FF5CD13A2ED5),
@@ -209,7 +209,7 @@ const uint64_t hashes[781] = {
 };
 #undef U64
 
-const int piecetohash[TEAM_COUNT][PIECE_COUNT] =
+const int zobrist_piecetohash[TEAM_COUNT][PIECE_COUNT] =
 {
     {
         -1,
@@ -247,25 +247,25 @@ uint64_t zobrist_hash(board_t* board)
             type = board->sqrs[board->ptable[t][p]] & SQUARE_MASK_TYPE;
             assert(board->ptable[t][p] < BOARD_AREA);
             assert((board->sqrs[board->ptable[t][p]] & SQUARE_MASK_TYPE) < PIECE_COUNT);
-            hash ^= hashes[BOARD_AREA * piecetohash[t][type] + board->ptable[t][p]];
+            hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[t][type] + board->ptable[t][p]];
         }
     }
 
     if(board->kcastle[TEAM_WHITE])
-        hash ^= hashes[768];
+        hash ^= zobrist_hashes[768];
     if(board->qcastle[TEAM_WHITE])
-        hash ^= hashes[769];
+        hash ^= zobrist_hashes[769];
     if(board->kcastle[TEAM_BLACK])
-        hash ^= hashes[770];
+        hash ^= zobrist_hashes[770];
     if(board->qcastle[TEAM_BLACK])
-        hash ^= hashes[771];
+        hash ^= zobrist_hashes[771];
 
     // this one line means we have to store attacks for both teams >:(
-    if(board->enpas != 0xFF && (board->pboards[!board->tomove][PIECE_PAWN] & pawnatk[board->tomove][board->enpas]))
-        hash ^= hashes[772 + board->enpas % BOARD_LEN];
+    if(board->enpas != 0xFF && (board->pboards[board->tomove][PIECE_PAWN] & pawnatk[!board->tomove][board->enpas]))
+        hash ^= zobrist_hashes[772 + board->enpas % BOARD_LEN];
 
     if(board->tomove == TEAM_WHITE)
-        hash ^= hashes[780];
+        hash ^= zobrist_hashes[780];
 
     return hash;
 }
