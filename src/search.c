@@ -1,5 +1,6 @@
 #include "search.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -273,15 +274,18 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         return brain_quiesencesearch(board, plies, alpha, beta);
 
     move_gensetup(board);
+    move_alllegal(board, &moves, false);
     
     // not in check, and not in king-and-pawn endgame
     checknull = !board->check 
+    && !board->stalemate
     && ((board->pboards[board->tomove][PIECE_KING] | board->pboards[board->tomove][PIECE_PAWN])
     != board->pboards[board->tomove][PIECE_NONE])
     && depth > 3;
 
     if(checknull)
     {
+        assert(!board->check);
         move_makenull(board, &mademove);
         eval = -search_r(board, -beta, -beta + 1, plies + 1, depth - 1 - 3, next, NULL);
         move_unmakenull(board, &mademove);
@@ -294,7 +298,6 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         }
     }
 
-    move_alllegal(board, &moves, false);
     search_order(board, &moves, plies, depth);
 
     if(!moves.count)

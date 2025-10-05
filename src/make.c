@@ -322,7 +322,6 @@ void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmov
 
     board->tomove = !board->tomove;
     board_checkstalemate(board);
-    board->history[board->nhistory++] = board->hash;
 }
 
 void move_unmake(board_t* restrict board, const mademove_t* restrict move)
@@ -379,41 +378,34 @@ void move_unmake(board_t* restrict board, const mademove_t* restrict move)
     }
     
     board->tomove = team;
-    board->nhistory--;
-
     board->stalemate = false;
 }
 
 void move_makenull(board_t* restrict board, mademove_t* restrict outmove)
 {
-    move_copytomadestate(board, outmove);
+    outmove->enpas = board->enpas;
+    outmove->attacks = board->attacks;
+    outmove->oldhash = board->hash;
 
-    // update hash
+    // en passant
     if(board->enpas != 0xFF && (board->pboards[board->tomove][PIECE_PAWN] & pawnatk[!board->tomove][board->enpas]))
         board->hash ^= zobrist_hashes[772 + board->enpas % BOARD_LEN];
+    
+    // to move hash
     board->hash ^= zobrist_hashes[780];
-
-    board->fiftymove++;
     
     board->enpas = 0xFF;
 
     board->tomove = !board->tomove;
-    board_checkstalemate(board);
-    board->history[board->nhistory++] = board->hash;
 }
 
 void move_unmakenull(board_t* restrict board, mademove_t* restrict outmove)
 {
-    team_e team;
-
-    team = !board->tomove;
-
-    move_copyfrommade(board, outmove);
+    board->enpas = outmove->enpas;
+    board->attacks = outmove->attacks;
+    board->hash = outmove->oldhash;
     
-    board->tomove = team;
-    board->nhistory--;
-
-    board->stalemate = false;
+    board->tomove = !board->tomove;
 }
 
 void move_makeinit(void)
