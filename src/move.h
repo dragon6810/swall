@@ -71,6 +71,7 @@ typedef struct mademove_s
 void move_tolongalg(move_t move, char str[MAX_LONGALG]);
 void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmove);
 void move_unmake(board_t* restrict board, const mademove_t* restrict move);
+void move_makeinit(void);
 void move_findattacks(board_t* restrict board);
 // also finds threats
 void move_findpins(board_t* board);

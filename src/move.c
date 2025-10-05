@@ -439,7 +439,7 @@ static inline void move_kingmoves(moveset_t* restrict set, board_t* restrict boa
 
     dst = src - 2;
     travelmask = (uint64_t) 1 << (src - 1) | (uint64_t) 1 << dst;
-    if(board->qcastle[team] && !(allpiece & travelmask) && !(board->attacks & travelmask))
+    if(board->qcastle[team] && !(allpiece & (travelmask | (uint64_t) 1 << (src - 3))) && !(board->attacks & travelmask))
     {
         move = src;
         move |= (move_t) dst << MOVEBITS_DST_BITS;
@@ -497,7 +497,7 @@ void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool c
     outmoves->count = 0;
     if(board->stalemate)
         return;
-        
+
     for(i=0; i<board->npiece[board->tomove]; i++)
         move_legalmoves(board, outmoves, board->ptable[board->tomove][i], caponly);
 }
@@ -722,4 +722,6 @@ void move_init(void)
         move_pawnboards(i);
         move_emptysweeps(i);
     }
+
+    move_makeinit();
 }

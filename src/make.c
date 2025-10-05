@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+bitboard_t nocastlefrom[TEAM_COUNT][2];
+bitboard_t nocastlecap[TEAM_COUNT][2];
+
 static inline void move_docapture(board_t* restrict board, move_t move, mademove_t* restrict made)
 {
     int dst;
@@ -66,54 +69,35 @@ static inline void move_updatecastlerights(board_t* restrict board, move_t move)
 {
     int src, dst;
     team_e team;
-    piece_e piece, capture;
-    int ourrank, enemyrank;
+    bitboard_t srcmask, dstmask;
 
     src = move & MOVEBITS_SRC_MASK;
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     team = board->tomove;
-    piece = board->sqrs[src] & SQUARE_MASK_TYPE;
-    capture = board->sqrs[dst] & SQUARE_MASK_TYPE;
-    
-    enemyrank = team == TEAM_WHITE ? BOARD_LEN - 1 : 0;
-    ourrank = team == TEAM_BLACK ? BOARD_LEN - 1 : 0;
 
-    if(piece == PIECE_KING)
-    {
-        if(board->kcastle[team])
-            board->hash ^= zobrist_hashes[768 + team * 2];
-        if(board->qcastle[team])
-            board->hash ^= zobrist_hashes[769 + team * 2];
-        board->kcastle[team] = board->qcastle[team] = false;
-    }
+    srcmask = (bitboard_t) 1 << src;
+    dstmask = (bitboard_t) 1 << dst;
 
-    else if(piece == PIECE_ROOK && src % BOARD_LEN == 0 && src / BOARD_LEN == ourrank)
+    if(board->kcastle[team] && srcmask & nocastlefrom[team][0])
     {
-        if(board->qcastle[team])
-            board->hash ^= zobrist_hashes[769 + team * 2];
-        board->qcastle[team] = false;
-    }
-    else if(piece == PIECE_ROOK && src % BOARD_LEN == BOARD_LEN - 1 && src / BOARD_LEN == ourrank)
-    {
-        if(board->kcastle[team])
-            board->hash ^= zobrist_hashes[768 + team * 2];
+        board->hash ^= zobrist_hashes[768 + team * 2];
         board->kcastle[team] = false;
     }
-
-    if(capture != PIECE_ROOK || dst / BOARD_LEN != enemyrank)
-        return;
-
-    if(dst % BOARD_LEN == 0)
+    if(board->qcastle[team] && srcmask & nocastlefrom[team][1])
     {
-        if(board->qcastle[!team])
-            board->hash ^= zobrist_hashes[769 + !team * 2];
-        board->qcastle[!team] = false;
+        board->hash ^= zobrist_hashes[769 + team * 2];
+        board->qcastle[team] = false;
     }
-    else if(dst % BOARD_LEN == BOARD_LEN - 1)
+
+    if(board->kcastle[!team] && dstmask & nocastlecap[!team][0])
     {
-        if(board->kcastle[!team])
-            board->hash ^= zobrist_hashes[768 + !team * 2];
+        board->hash ^= zobrist_hashes[768 + !team * 2];
         board->kcastle[!team] = false;
+    }
+    if(board->qcastle[!team] && dstmask & nocastlecap[!team][1])
+    {
+        board->hash ^= zobrist_hashes[769 + !team * 2];
+        board->qcastle[!team] = false;
     }
 }
 
@@ -268,6 +252,7 @@ static inline void move_copyfrommade(board_t* restrict board, const mademove_t* 
     board->fiftymove = made->fiftymove;
     board->lastperm = made->lastperm;
     board->attacks = made->attacks;
+    board->hash = made->oldhash;
 }
 
 static inline void move_updatelastperm(board_t* restrict board, move_t move)
@@ -395,6 +380,26 @@ void move_unmake(board_t* restrict board, const mademove_t* restrict move)
     board->nhistory--;
 
     board_findpieces(board);
-    board->hash = move->oldhash;
-    board_checkstalemate(board);
+    board->stalemate = false;
+}
+
+void move_makeinit(void)
+{
+    const bitboard_t kinghome = 0x10;
+    const bitboard_t krook = 0x80;
+    const bitboard_t qrook = 0x01;
+
+    team_e t;
+    int homerank;
+
+    for(t=0; t<TEAM_COUNT; t++)
+    {
+        homerank = t == TEAM_WHITE ? 0 : BOARD_LEN - 1;
+
+        nocastlefrom[t][0] = (kinghome | krook) << homerank * BOARD_LEN;
+        nocastlefrom[t][1] = (kinghome | qrook) << homerank * BOARD_LEN;
+
+        nocastlecap[t][0] = krook << homerank * BOARD_LEN;
+        nocastlecap[t][1] = qrook << homerank * BOARD_LEN;
+    }
 }
