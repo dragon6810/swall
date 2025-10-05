@@ -21,6 +21,12 @@ static const int diroffs[DIR_COUNT] =
 };
 
 extern int sweeptable[BOARD_AREA][DIR_COUNT];
+extern bitboard_t kingatk[BOARD_AREA];
+extern bitboard_t knightatk[BOARD_AREA];
+extern bitboard_t pawnatk[TEAM_COUNT][BOARD_AREA];
+extern bitboard_t pawnpush[TEAM_COUNT][BOARD_AREA];
+extern bitboard_t pawndbl[TEAM_COUNT][BOARD_AREA];
+extern bitboard_t emptysweeps[BOARD_AREA][DIR_COUNT];
 
 typedef enum
 {
@@ -54,9 +60,11 @@ typedef struct mademove_s
     piece_e captured; // PIECE_NONE if nothing was captured
 
     uint8_t enpas;
-    bool kcastle[TEAM_COUNT];
-    bool qcastle[TEAM_COUNT];
+    uint8_t castle; // KQkq
     int fiftymove;
+    uint16_t lastperm;
+
+    bitboard_t attacks;
 } mademove_t;
 
 void move_tolongalg(move_t move, char str[MAX_LONGALG]);
@@ -65,8 +73,6 @@ void move_unmake(board_t* board, const mademove_t* move);
 void move_findattacks(board_t* board);
 // also finds threats
 void move_findpins(board_t* board);
-// moves can be NULL
-void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly);
 // every legal move for every piece of whoever's turn it is
 void move_alllegal(board_t* board, moveset_t* outmoves, bool caponly);
 // ignores input flags, fills output flags

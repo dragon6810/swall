@@ -5,18 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static inline int16_t* move_threefold(board_t* board)
-{
-    int16_t *pval;
-
-    pval = zobrist_find(&board->threefold, board->hash);
-    if(pval)
-        return pval;
-
-    zobrist_set(&board->threefold, board->hash, 0);
-    return zobrist_find(&board->threefold, board->hash);
-}
-
 static inline void move_docapture(board_t* board, move_t move, mademove_t* made)
 {
     int dst;
@@ -176,22 +164,14 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
     made->move = move;
     made->captured = PIECE_NONE;
     made->enpas = board->enpas;
-    made->kcastle[0] = board->kcastle[0];
-    made->kcastle[1] = board->kcastle[1];
-    made->qcastle[0] = board->qcastle[0];
-    made->qcastle[1] = board->qcastle[1];
-    // made->dblcheck = board->dblcheck;
-    // made->isthreat = board->isthreat;
-    // made->threat = board->threat;
+    made->castle = board->kcastle[TEAM_WHITE] << 3 
+                 | board->qcastle[TEAM_WHITE] << 2 
+                 | board->kcastle[TEAM_BLACK] << 1 
+                 | board->qcastle[TEAM_BLACK];
     made->fiftymove = board->fiftymove;
+    made->lastperm = board->lastperm;
 
-    /*
-    memcpy(made->npiece, board->npiece, sizeof(board->npiece));
-    memcpy(made->ptable, board->ptable, sizeof(board->ptable));
-    memcpy(made->attacks, board->attacks, sizeof(board->attacks));
-    memcpy(made->pinmasks, board->pinmasks, sizeof(board->pinmasks));
-    memcpy(made->check, board->check, sizeof(board->check));
-    */
+    made->attacks = board->attacks;
 
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     if(board->sqrs[dst])
@@ -203,22 +183,27 @@ static void move_copytomade(board_t* board, move_t move, mademove_t* made)
 static void move_copyfrommade(board_t* board, const mademove_t* made)
 {
     board->enpas = made->enpas;
-    board->kcastle[0] = made->kcastle[0];
-    board->kcastle[1] = made->kcastle[1];
-    board->qcastle[0] = made->qcastle[0];
-    board->qcastle[1] = made->qcastle[1];
-    // board->dblcheck = made->dblcheck;
-    // board->isthreat = made->isthreat;
-    // board->threat = made->threat;
+    board->kcastle[TEAM_WHITE] = made->castle >> 3 & 1;
+    board->qcastle[TEAM_WHITE] = made->castle >> 2 & 1;
+    board->kcastle[TEAM_BLACK] = made->castle >> 1 & 1;
+    board->qcastle[TEAM_BLACK] = made->castle & 1;
     board->fiftymove = made->fiftymove;
+    board->lastperm = made->lastperm;
+    board->attacks = made->attacks;
+}
 
-    /*
-    memcpy(board->npiece, made->npiece, sizeof(made->npiece));
-    memcpy(board->ptable, made->ptable, sizeof(made->ptable));
-    memcpy(board->attacks, made->attacks, sizeof(made->attacks));
-    memcpy(board->pinmasks, made->pinmasks, sizeof(made->pinmasks));
-    memcpy(board->check, made->check, sizeof(made->check));
-    */
+static inline void move_updatelastperm(board_t* board, move_t move)
+{
+    int src, dst;
+    piece_e piece;
+
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+
+    piece = board->sqrs[src] & SQUARE_MASK_TYPE;
+
+    if(piece == PIECE_PAWN || board->sqrs[dst] & SQUARE_MASK_TYPE)
+        board->lastperm = board->nhistory;
 }
 
 void move_make(board_t* board, move_t move, mademove_t* outmove)
@@ -239,6 +224,7 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
     ptype = board->sqrs[src] & SQUARE_MASK_TYPE;
 
     move_copytomade(board, move, outmove);
+    move_updatelastperm(board, move);
     move_updatefiftymove(board, move);
     move_doenpas(board, move);
     move_updateenpas(board, move, outmove);
@@ -267,46 +253,17 @@ void move_make(board_t* board, move_t move, mademove_t* outmove)
 
     board->tomove = !board->tomove;
     board_update(board);
-    (*move_threefold(board))++;
-
-#if defined(PARANOID) || 1
-    if(board->check[!board->tomove])
-    {
-        char str[MAX_LONGALG];
-
-        move_tolongalg(move, str);
-
-        printf("moved into check (%s):\n", str);
-        board_print(board);
-
-        printf("before move:\n");
-        move_unmake(board, outmove);
-        board_print(board);
-
-        abort();
-    }
-#endif
+    board->history[board->nhistory++] = board->hash;
 }
 
 // there's a lot of repeated code from move_domove.
 // maybe figure out how to generalize this.
 void move_unmake(board_t* board, const mademove_t* move)
 {
-    int i;
-
     int type, src, dst;
     team_e team;
     piece_e ptype, oldtype;
     bitboard_t srcmask, dstmask;
-
-    (*move_threefold(board))--;
-
-    board->enpas = move->enpas;
-    for(i=0; i<TEAM_COUNT; i++)
-    {
-        board->kcastle[i] = move->kcastle[i];
-        board->qcastle[i] = move->qcastle[i];
-    }
     
     src = move->move & MOVEBITS_SRC_MASK;
     dst = (move->move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
@@ -319,6 +276,7 @@ void move_unmake(board_t* board, const mademove_t* move)
     ptype = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
     move_docastle(board, move->move, team);
+    move_copyfrommade(board, move);
 
     switch(type)
     {
@@ -354,6 +312,11 @@ void move_unmake(board_t* board, const mademove_t* move)
     }
     
     board->tomove = team;
-    move_copyfrommade(board, move);
-    board_update(board);
+    board->nhistory--;
+
+    board_findpieces(board);
+    move_findpins(board);
+    board_findcheck(board);
+    board->hash = zobrist_hash(board);
+    board_checkstalemate(board);
 }

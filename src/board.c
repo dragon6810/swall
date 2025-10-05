@@ -40,10 +40,7 @@ void board_findpieces(board_t* board)
 
 void board_findcheck(board_t* board)
 {
-    int i;
-
-    for(i=0; i<TEAM_COUNT; i++)
-        board->check[i] = (board->pboards[i][PIECE_KING] & board->attacks[!i][PIECE_NONE]) != 0;
+    board->check = board->pboards[board->tomove][PIECE_KING] & board->attacks;
 }
 
 // #define PRINTUNICODE
@@ -163,10 +160,7 @@ int board_loadfen(board_t* board, const char* fen)
 
     if(board->ttable.data)
         transpose_free(&board->ttable);
-    zobrist_freetable(&board->threefold);
     memset(board, 0, sizeof(board_t));
-
-    zobrist_alloctable(&board->threefold, 2048);
 
     r = BOARD_LEN-1;
     f = 0;
@@ -356,25 +350,32 @@ badfen:
     return -1;
 }
 
-static void board_checkstalemate(board_t* board)
+void board_checkstalemate(board_t* board)
 {
-    int16_t *pval;
+    int i;
+
+    int repetitions;
 
     board->stalemate = false;
 
-    if(board->fiftymove >= 50)
+    if(board->fiftymove >= 100)
     {
         board->stalemate = true;
         return;
     }
     
-    pval = zobrist_find(&board->threefold, board->hash);
-    if(!pval)
-        return;
-
-    // dropping this to two somehow makes the bot play horrendously. this makes no sense!
-    if(*pval >= 3)
-        board->stalemate = true;
+    for(i=board->lastperm, repetitions=0; i<board->nhistory; i++)
+    {
+        if(board->history[i] != board->hash)
+            continue;
+        
+        repetitions++;
+        if(repetitions >= 3)
+        {
+            board->stalemate = true;
+            return;
+        }
+    }
 }
 
 void board_update(board_t* board)

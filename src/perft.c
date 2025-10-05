@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "move.h"
 
@@ -43,6 +44,9 @@ static void perft_order(moveset_t* moves)
     while (swapped);
 }
 
+uint64_t nnodes;
+clock_t start;
+
 int perft_r(board_t* board, int depthfromroot, int depth)
 {
     int i;
@@ -51,6 +55,14 @@ int perft_r(board_t* board, int depthfromroot, int depth)
     int count, total;
     mademove_t made;
     char str[MAX_LONGALG];
+
+    nnodes++;
+
+    if(!depthfromroot)
+    {
+        nnodes = 0;
+        start = clock();
+    }
 
     if(!depth)
         return 1;
@@ -72,6 +84,9 @@ int perft_r(board_t* board, int depthfromroot, int depth)
         move_tolongalg(moves.moves[i], str);
         printf("%s: %d\n", str, count);
     }
+
+    if(!depthfromroot)
+        printf("info nps %llu\n", (uint64_t) ((double) nnodes / ((double) (clock() - start) / CLOCKS_PER_SEC)));
 
     return total;
 }

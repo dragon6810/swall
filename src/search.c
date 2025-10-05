@@ -97,7 +97,7 @@ static inline score_t brain_moveguess(board_t* board, move_t mv, int plies, int 
         score += eval_pscore[pdst];
 
     // opponent captures us
-    if(board->attacks[!board->tomove][PIECE_NONE] & dstmask)
+    if(board->attacks & dstmask)
         score -= eval_pscore[psrc];
 
     return score;
@@ -176,7 +176,7 @@ static int brain_calcext(board_t* board, move_t move, int next)
 
     ptype = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
-    if(board->check[board->tomove])
+    if(board->check)
         ext++;
 
     if(ptype == PIECE_PAWN && (dst / BOARD_LEN == 1 || dst / BOARD_LEN == BOARD_LEN - 2))
@@ -234,7 +234,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     if(!moves.count)
     {
         eval = 0; // stalemate
-        if(board->check[board->tomove])
+        if(board->check)
             eval = -10000 + plies; // checkmate
 
         transpose_store(&board->ttable, board->hash, depth, eval, 0, TRANSPOS_PV);

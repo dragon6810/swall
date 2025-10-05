@@ -9,7 +9,6 @@
 #include "magic.h"
 
 int sweeptable[BOARD_AREA][DIR_COUNT];
-
 bitboard_t kingatk[BOARD_AREA];
 bitboard_t knightatk[BOARD_AREA];
 bitboard_t pawnatk[TEAM_COUNT][BOARD_AREA];
@@ -50,104 +49,78 @@ void move_tolongalg(move_t move, char str[MAX_LONGALG])
     str[5] = 0;
 }
 
-static void move_pawnatk(board_t* board, uint8_t src, team_e team)
+static inline void move_pawnatk(board_t* board, uint8_t src, team_e team)
 {
-    bitboard_t atk;
-
-    atk = pawnatk[team][src];
-    board->attacks[team][PIECE_NONE] |= atk;
-    board->attacks[team][PIECE_PAWN] |= atk;
+    board->attacks |= pawnatk[team][src];
 }
 
-static void move_knightatk(board_t* board, uint8_t src, team_e team)
+static inline void move_knightatk(board_t* board, uint8_t src, team_e team)
 {
-    bitboard_t atk;
-
-    atk = knightatk[src];
-    board->attacks[team][PIECE_NONE] |= atk;
-    board->attacks[team][PIECE_KNIGHT] |= atk;
+    board->attacks |= knightatk[src];
 }
 
-static void move_bishopatk(board_t* board, uint8_t src, team_e team)
+static inline void move_bishopatk(board_t* board, uint8_t src, team_e team)
 {
-    bitboard_t block, atk;
+    bitboard_t block;
 
     block = (board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) ^ board->pboards[!team][PIECE_KING];
-    atk = magic_lookup(MAGIC_BISHOP, src, block);
-    board->attacks[team][PIECE_NONE] |= atk;
-    board->attacks[team][PIECE_BISHOP] |= atk;
+    board->attacks |= magic_lookup(MAGIC_BISHOP, src, block);
 }
 
-static void move_rookatk(board_t* board, uint8_t src, team_e team)
+static inline void move_rookatk(board_t* board, uint8_t src, team_e team)
 {
-    bitboard_t block, atk;
+    bitboard_t block;
 
     block = (board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) ^ board->pboards[!team][PIECE_KING];
-    atk = magic_lookup(MAGIC_ROOK, src, block);
-    board->attacks[team][PIECE_NONE] |= atk;
-    board->attacks[team][PIECE_ROOK] |= atk;
+    board->attacks |= magic_lookup(MAGIC_ROOK, src, block);
 }
 
-static void move_queenatk(board_t* board, uint8_t src, team_e team)
+static inline void move_queenatk(board_t* board, uint8_t src, team_e team)
 {
-    bitboard_t block, atk;
+    bitboard_t block;
 
     block = (board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE]) ^ board->pboards[!team][PIECE_KING];
-    
-    atk = 0;
-    atk |= magic_lookup(MAGIC_ROOK, src, block);
-    atk |= magic_lookup(MAGIC_BISHOP, src, block);
-    board->attacks[team][PIECE_NONE] |= atk;
-    board->attacks[team][PIECE_QUEEN] |= atk;
+    board->attacks |= magic_lookup(MAGIC_ROOK, src, block) | magic_lookup(MAGIC_BISHOP, src, block);
 }
 
-static void move_kingatk(board_t* board, uint8_t src, team_e team)
+static inline void move_kingatk(board_t* board, uint8_t src, team_e team)
 {
-    bitboard_t atk;
-
-    atk = kingatk[src];
-    board->attacks[team][PIECE_NONE] |= atk;
-    board->attacks[team][PIECE_KING] |= atk;
+    board->attacks |= kingatk[src];
 }
 
 void move_findattacks(board_t* board)
 {
-    int i, j;
+    int i;
 
-    piece_e p;
+    team_e team;
 
-    for(i=0; i<TEAM_COUNT; i++)
+    team = !board->tomove;
+
+    board->attacks = 0;
+    for(i=0; i<board->npiece[team]; i++)
     {
-        for(j=0; j<PIECE_COUNT; j++)
-            board->attacks[i][j] = 0;
-
-        for(j=0; j<board->npiece[i]; j++)
+        switch(board->sqrs[board->ptable[team][i]] & SQUARE_MASK_TYPE)
         {
-            p = board->sqrs[board->ptable[i][j]] & SQUARE_MASK_TYPE;
-            
-            switch (p)
-            {
-            case PIECE_KING:
-                move_kingatk(board, board->ptable[i][j], i);
-                break;
-            case PIECE_QUEEN:
-                move_queenatk(board, board->ptable[i][j], i);
-                break;
-            case PIECE_ROOK:
-                move_rookatk(board, board->ptable[i][j], i);
-                break;
-            case PIECE_BISHOP:
-                move_bishopatk(board, board->ptable[i][j], i);
-                break;
-            case PIECE_KNIGHT:
-                move_knightatk(board, board->ptable[i][j], i);
-                break;
-            case PIECE_PAWN:
-                move_pawnatk(board, board->ptable[i][j], i);
-                break;
-            default:
-                break;
-            }
+        case PIECE_KING:
+            move_kingatk(board, board->ptable[team][i], team);
+            break;
+        case PIECE_QUEEN:
+            move_queenatk(board, board->ptable[team][i], team);
+            break;
+        case PIECE_ROOK:
+            move_rookatk(board, board->ptable[team][i], team);
+            break;
+        case PIECE_BISHOP:
+            move_bishopatk(board, board->ptable[team][i], team);
+            break;
+        case PIECE_KNIGHT:
+            move_knightatk(board, board->ptable[team][i], team);
+            break;
+        case PIECE_PAWN:
+            move_pawnatk(board, board->ptable[team][i], team);
+            break;
+        default:
+            break;
         }
     }
 }
@@ -208,8 +181,8 @@ void move_findpins(board_t* board)
     dir_e dir;
 
     team_e team;
-    uint8_t kingpos, nblockers, sqr;
-    bitboard_t queenmask, rookmask, bishopmask, pinnermask, moves, sweepmask, tempmask;
+    uint8_t kingpos, nblockers;
+    bitboard_t queenmask, rookmask, bishopmask, pinnermask, moves, sweepmask, blockermask;
 
     board->isthreat = board->dblcheck = false;
     for(i=0; i<BOARD_AREA; i++)
@@ -242,7 +215,8 @@ void move_findpins(board_t* board)
             continue;
 
         // we actually hit a queen, rook, or bishop, but we could have multiple or no pieces in the way
-        nblockers = __builtin_popcountll(sweepmask & board->pboards[team][PIECE_NONE]);
+        blockermask = sweepmask & board->pboards[team][PIECE_NONE];
+        nblockers = __builtin_popcountll(blockermask);
 
         if(!nblockers)
         {
@@ -260,17 +234,11 @@ void move_findpins(board_t* board)
         if(nblockers != 1)
             continue;
 
-        tempmask = sweepmask;
-        while(tempmask)
-        {
-            sqr = __builtin_ctzll(tempmask);
-            tempmask &= tempmask - 1;
-            board->pinmasks[sqr] = sweepmask;
-        }
+        board->pinmasks[__builtin_ctzll(blockermask)] = sweepmask;
     }
 }
 
-static void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t src, bitboard_t moves)
+static inline void move_bitboardtomoves(board_t* board, moveset_t* set, uint8_t src, bitboard_t moves)
 {
     uint8_t dst;
     move_t move;
@@ -312,7 +280,7 @@ static inline bool move_enpaslegal(board_t* board, uint8_t src)
     return true;
 }
 
-static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     const bitboard_t promotionmask = 0xFF000000000000FF;
 
@@ -380,7 +348,7 @@ static void move_pawnmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     set->moves[set->count++] = move;
 }
 
-static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -396,7 +364,7 @@ static void move_knightmoves(moveset_t* set, board_t* board, uint8_t src, team_e
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static bitboard_t move_getslideratk(board_t* board, magicpiece_e type, uint8_t src, bool caponly)
+static inline bitboard_t move_getslideratk(board_t* board, magicpiece_e type, uint8_t src, bool caponly)
 {
     team_e team;
     bitboard_t moves;
@@ -415,7 +383,7 @@ static bitboard_t move_getslideratk(board_t* board, magicpiece_e type, uint8_t s
     return moves;
 }
 
-static void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -423,7 +391,7 @@ static void move_bishopmoves(moveset_t* set, board_t* board, uint8_t src, team_e
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -431,7 +399,7 @@ static void move_rookmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     bitboard_t moves;
 
@@ -439,7 +407,7 @@ static void move_queenmoves(moveset_t* set, board_t* board, uint8_t src, team_e 
     move_bitboardtomoves(board, set, src, moves);
 }
 
-static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
+static inline void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e team, bool caponly)
 {
     uint8_t dst;
     bitboard_t moves;
@@ -448,20 +416,20 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
     moves = kingatk[src];
     moves &= ~board->pboards[team][PIECE_NONE];
-    moves &= ~board->attacks[!team][PIECE_NONE];
+    moves &= ~board->attacks;
     if(caponly)
         moves &= board->pboards[!team][PIECE_NONE];
 
     move_bitboardtomoves(board, set, src, moves);
 
-    if(caponly || board->check[team])
+    if(caponly || board->check)
         return;
 
     allpiece = board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE];
     
     dst = src + 2;
     travelmask = (uint64_t) 1 << (src + 1) | (uint64_t) 1 << dst;
-    if(board->kcastle[team] && !(allpiece & travelmask) && !(board->attacks[!team][PIECE_NONE] & travelmask))
+    if(board->kcastle[team] && !(allpiece & travelmask) && !(board->attacks & travelmask))
     {
         move = src;
         move |= (move_t) dst << MOVEBITS_DST_BITS;
@@ -471,7 +439,7 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
 
     dst = src - 2;
     travelmask = (uint64_t) 1 << (src - 1) | (uint64_t) 1 << dst;
-    if(board->qcastle[team] && !(allpiece & travelmask) && !(board->attacks[!team][PIECE_NONE] & travelmask))
+    if(board->qcastle[team] && !(allpiece & travelmask) && !(board->attacks & travelmask))
     {
         move = src;
         move |= (move_t) dst << MOVEBITS_DST_BITS;
@@ -480,7 +448,7 @@ static void move_kingmoves(moveset_t* set, board_t* board, uint8_t src, team_e t
     }
 }
 
-void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
+static inline void move_legalmoves(board_t* board, moveset_t* moves, uint8_t src, bool caponly)
 {
     piece_e piece;
 

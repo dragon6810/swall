@@ -9,6 +9,8 @@
 
 #define BOARD_LEN 8
 #define BOARD_AREA (BOARD_LEN * BOARD_LEN)
+// this is overkill, but board_t is on the heap and only once or twice, so it's fine.
+#define MAX_GAME_PLIES 8849
 
 #define FEN_MAX 92
 
@@ -63,20 +65,22 @@ typedef struct board_s
     uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     square_t sqrs[BOARD_AREA];
 
+    uint16_t nhistory;
+    uint16_t lastperm; // last permenant history move, e.g. pawn push or capture
+    uint64_t history[MAX_GAME_PLIES];
     uint64_t hash;
-
-    zobristdict_t threefold;
+    
     bool stalemate;
     int fiftymove;
 
-    bitboard_t attacks[TEAM_COUNT][PIECE_COUNT]; // PIECE_NONE is all pieces
+    bitboard_t attacks; // of !tomove
     bitboard_t pinmasks[BOARD_AREA];
     bool dblcheck;
     bool isthreat;
     bitboard_t threat;
     
     team_e tomove;
-    bool check[TEAM_COUNT];
+    bool check; // of tomove
 
     uint8_t enpas; // on the last move, did a pawn just move two squares? if so, the target. else 0xFF
     bool kcastle[TEAM_COUNT]; // starts at true, false if the team's kingside rook moves
@@ -87,6 +91,7 @@ typedef struct board_s
 
 void board_findpieces(board_t* board);
 void board_findcheck(board_t* board);
+void board_checkstalemate(board_t* board);
 void board_print(const board_t* board);
 void board_printbits(const bitboard_t bits);
 int board_loadfen(board_t* board, const char* fen);

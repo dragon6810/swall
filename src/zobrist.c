@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "board.h"
+#include "move.h"
 
 #define U64(n) n##ULL
 const uint64_t hashes[781] = {
@@ -260,7 +261,7 @@ uint64_t zobrist_hash(board_t* board)
         hash ^= hashes[771];
 
     // this one line means we have to store attacks for both teams >:(
-    if(board->enpas != 0xFF && (board->attacks[board->tomove][PIECE_PAWN] & (uint64_t) 1 << board->enpas))
+    if(board->enpas != 0xFF && (board->pboards[!board->tomove][PIECE_PAWN] & pawnatk[board->tomove][board->enpas]))
         hash ^= hashes[772 + board->enpas % BOARD_LEN];
 
     if(board->tomove == TEAM_WHITE)
