@@ -76,14 +76,12 @@ void move_unmakenull(board_t* restrict board, mademove_t* restrict outmove);
 void move_makeinit(void);
 void move_findattacks(board_t* restrict board);
 // also finds threats
-void move_findpins(board_t* board);
+void move_findpins(board_t* restrict board);
 // MUST be called before alllegal
 void move_gensetup(board_t* restrict board);
 // every legal move for every piece of whoever's turn it is
 void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool caponly);
-// ignores input flags, fills output flags
-move_t* move_findmove(moveset_t* set, move_t move);
-void move_printset(moveset_t* set);
+bool move_givescheck(board_t* restrict board, move_t move);
 void move_init(void);
 
 #endif

@@ -526,43 +526,67 @@ void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool c
     }
 }
 
-move_t* move_findmove(moveset_t* set, move_t move)
+bool move_givescheck(board_t* restrict board, move_t move)
 {
-    int i;
+    movetype_e type;
+    piece_e srctype;
+    piece_e dsttype;
+    int8_t src, dst, kingpos;
+    bitboard_t occ, atk;
 
-    for(i=0; i<set->count; i++)
-        if((set->moves[i] & ~MOVEBITS_TYP_MASK) == (move & ~MOVEBITS_TYP_MASK))
-            return &set->moves[i];
+    src = move & MOVEBITS_SRC_MASK;
+    dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
+    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
 
-    return NULL;
-}
+    srctype = board->sqrs[src] & SQUARE_MASK_TYPE;
+    dsttype = srctype;
+    if(type >= MOVETYPE_PROMQ && type <= MOVETYPE_PROMN)
+        dsttype = PIECE_QUEEN + type - MOVETYPE_PROMQ;
 
-void move_printset(moveset_t* set)
-{
-    int i, r, f;
+    // first, check if we moved into a position which attacks the king
+    occ = board->pboards[TEAM_WHITE][PIECE_NONE] | board->pboards[TEAM_BLACK][PIECE_NONE];
 
-    // this is very inefficient. use a hashmap maybe? it doesnt really matter anyway.
+    occ ^= (bitboard_t) 1 << src;
+    occ |= (bitboard_t) 1 << dst;
+    if(type == MOVETYPE_ENPAS)
+        occ ^= (bitboard_t) 1 << (dst + PAWN_OFFS(!board->tomove));
 
-    for(r=BOARD_LEN-1; r>=0; r--)
+    switch(dsttype)
     {
-        for(f=0; f<BOARD_LEN; f++)
-        {
-            for(i=0; i<set->count; i++)
-                if(((set->moves[i] & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS) == r * BOARD_LEN + f)
-                    break;
-
-            if(i<set->count)
-                printf("# ");
-            else
-            {
-                if((r + f) & 1)
-                    printf("- ");
-                else
-                    printf("+ ");
-            }
-        }
-        printf("\n");
+    case PIECE_QUEEN:
+        atk = magic_lookup(MAGIC_ROOK, dst, occ) | magic_lookup(MAGIC_BISHOP, dst, occ);
+        break;
+    case PIECE_ROOK:
+        atk = magic_lookup(MAGIC_ROOK, dst, occ);
+        break;
+    case PIECE_BISHOP:
+        atk = magic_lookup(MAGIC_BISHOP, dst, occ);
+        break;
+    case PIECE_KNIGHT:
+        atk = knightatk[dst];
+        break;
+    case PIECE_PAWN:
+        atk = pawnatk[board->tomove][dst];
+        break;
+    default:
+        atk = 0;
+        break;
     }
+
+    if(atk & board->pboards[!board->tomove][PIECE_KING])
+        return true;
+
+    // now, check for discovered check
+    kingpos = __builtin_ctzll(board->pboards[!board->tomove][PIECE_KING]);
+    
+    atk = magic_lookup(MAGIC_ROOK, kingpos, occ);
+    if(atk & board->pboards[board->tomove][PIECE_ROOK] || atk & board->pboards[board->tomove][PIECE_QUEEN])
+        return true;
+    atk = magic_lookup(MAGIC_BISHOP, kingpos, occ);
+    if(atk & board->pboards[board->tomove][PIECE_BISHOP] || atk & board->pboards[board->tomove][PIECE_QUEEN])
+        return true;
+
+    return false;
 }
 
 static void move_emptysweeps(uint8_t src)
