@@ -495,16 +495,19 @@ static inline void move_legalmoves(board_t* restrict board, moveset_t* restrict 
     }
 }
 
+void move_gensetup(board_t* restrict board)
+{
+    move_findattacks(board);
+    board_findcheck(board);
+    move_findpins(board);
+}
+
 void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool caponly)
 {
     piece_e p;
 
     bitboard_t bb;
     int square;
-
-    move_findattacks(board);
-    board_findcheck(board);
-    move_findpins(board);
 
     outmoves->count = 0;
     if(board->stalemate)

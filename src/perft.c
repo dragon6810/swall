@@ -67,6 +67,7 @@ int perft_r(board_t* board, int depthfromroot, int depth)
     if(!depth)
         return 1;
 
+    move_gensetup(board);
     move_alllegal(board, &moves, false);
     if(!depthfromroot)
         perft_order(&moves);

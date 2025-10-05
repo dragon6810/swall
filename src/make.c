@@ -218,12 +218,8 @@ static inline void move_makehash(board_t* restrict board, move_t move)
     board->hash ^= zobrist_hashes[780];
 }
 
-static inline void move_copytomade(board_t* restrict board, move_t move, mademove_t* restrict made)
+static inline void move_copytomadestate(board_t* restrict board, mademove_t* restrict made)
 {
-    int dst;
-
-    made->move = move;
-    made->captured = PIECE_NONE;
     made->enpas = board->enpas;
     made->castle = board->kcastle[TEAM_WHITE] << 3 
                  | board->qcastle[TEAM_WHITE] << 2 
@@ -231,9 +227,18 @@ static inline void move_copytomade(board_t* restrict board, move_t move, mademov
                  | board->qcastle[TEAM_BLACK];
     made->fiftymove = board->fiftymove;
     made->lastperm = board->lastperm;
-
     made->attacks = board->attacks;
     made->oldhash = board->hash;
+}
+
+static inline void move_copytomade(board_t* restrict board, move_t move, mademove_t* restrict made)
+{
+    int dst;
+
+    made->move = move;
+    made->captured = PIECE_NONE;
+    
+    move_copytomadestate(board, made);
 
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
     if(board->sqrs[dst])
@@ -320,8 +325,6 @@ void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmov
     board->history[board->nhistory++] = board->hash;
 }
 
-// there's a lot of repeated code from move_domove.
-// maybe figure out how to generalize this.
 void move_unmake(board_t* restrict board, const mademove_t* restrict move)
 {
     int type, src, dst;
@@ -374,6 +377,38 @@ void move_unmake(board_t* restrict board, const mademove_t* restrict move)
         board->pboards[!team][PIECE_NONE] ^= dstmask;
         board->pboards[!team][move->captured] ^= dstmask;
     }
+    
+    board->tomove = team;
+    board->nhistory--;
+
+    board->stalemate = false;
+}
+
+void move_makenull(board_t* restrict board, mademove_t* restrict outmove)
+{
+    move_copytomadestate(board, outmove);
+
+    // update hash
+    if(board->enpas != 0xFF && (board->pboards[board->tomove][PIECE_PAWN] & pawnatk[!board->tomove][board->enpas]))
+        board->hash ^= zobrist_hashes[772 + board->enpas % BOARD_LEN];
+    board->hash ^= zobrist_hashes[780];
+
+    board->fiftymove++;
+    
+    board->enpas = 0xFF;
+
+    board->tomove = !board->tomove;
+    board_checkstalemate(board);
+    board->history[board->nhistory++] = board->hash;
+}
+
+void move_unmakenull(board_t* restrict board, mademove_t* restrict outmove)
+{
+    team_e team;
+
+    team = !board->tomove;
+
+    move_copyfrommade(board, outmove);
     
     board->tomove = team;
     board->nhistory--;

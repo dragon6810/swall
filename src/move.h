@@ -71,10 +71,14 @@ typedef struct mademove_s
 void move_tolongalg(move_t move, char str[MAX_LONGALG]);
 void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmove);
 void move_unmake(board_t* restrict board, const mademove_t* restrict move);
+void move_makenull(board_t* restrict board, mademove_t* restrict outmove);
+void move_unmakenull(board_t* restrict board, mademove_t* restrict outmove);
 void move_makeinit(void);
 void move_findattacks(board_t* restrict board);
 // also finds threats
 void move_findpins(board_t* board);
+// MUST be called before alllegal
+void move_gensetup(board_t* restrict board);
 // every legal move for every piece of whoever's turn it is
 void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool caponly);
 // ignores input flags, fills output flags

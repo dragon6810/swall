@@ -169,6 +169,7 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
     if(besteval > alpha)
         alpha = besteval;
 
+    move_gensetup(board);
     move_alllegal(board, &moves, true);
     search_order(board, &moves, -1, -1);
 
@@ -239,6 +240,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     transpos_type_e transpostype;
     bool needsfullsearch;
     bool capture;
+    bool checknull;
     int ext;
 
     nnodes++;
@@ -269,6 +271,28 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
 
     if(!depth)
         return brain_quiesencesearch(board, plies, alpha, beta);
+
+    move_gensetup(board);
+    
+    // not in check, and not in king-and-pawn endgame
+    checknull = !board->check 
+    && ((board->pboards[board->tomove][PIECE_KING] | board->pboards[board->tomove][PIECE_PAWN])
+    != board->pboards[board->tomove][PIECE_NONE])
+    && depth > 3;
+
+    if(checknull)
+    {
+        move_makenull(board, &mademove);
+        eval = -search_r(board, -beta, -beta + 1, plies + 1, depth - 1 - 3, next, NULL);
+        move_unmakenull(board, &mademove);
+
+        if(eval >= beta)
+        {
+            ncutnodes++;
+            transpose_store(&board->ttable, board->hash, depth, eval, 0, TRANSPOS_LOWER);
+            return eval;
+        }
+    }
 
     move_alllegal(board, &moves, false);
     search_order(board, &moves, plies, depth);
@@ -322,7 +346,6 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         // move was so good that opponent will never let us get to this point
         if(alpha >= beta)
         {
-            
             ncutnodes++;
             transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;

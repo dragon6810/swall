@@ -50,6 +50,7 @@ int tryparsemove(const char* str)
     bmove = (move[0] - 'a') + (move[1] - '1') * BOARD_LEN;
     bmove |= (uint16_t) ((move[2] - 'a') + (move[3] - '1') * BOARD_LEN) << MOVEBITS_DST_BITS;
 
+    move_gensetup(&board);
     move_alllegal(&board, &moves, false);
     for(i=0, pmove=NULL; i<moves.count; i++)
     {
