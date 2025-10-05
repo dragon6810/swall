@@ -61,8 +61,6 @@ typedef struct board_s
 {
     // pboards[team][PIECE_NONE] is a bitwise or of all pieces for that team
     bitboard_t pboards[TEAM_COUNT][PIECE_COUNT];
-    uint8_t npiece[TEAM_COUNT];
-    uint8_t ptable[TEAM_COUNT][PIECE_MAX];
     square_t sqrs[BOARD_AREA];
 
     uint16_t nhistory;
@@ -89,7 +87,6 @@ typedef struct board_s
     ttable_t ttable;
 } board_t;
 
-void board_findpieces(board_t* board);
 void board_findcheck(board_t* board);
 void board_checkstalemate(board_t* board);
 void board_print(const board_t* board);

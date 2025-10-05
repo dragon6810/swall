@@ -57,20 +57,19 @@ static inline void eval_pawnstructure(board_t* board, score_t bonus[TEAM_COUNT])
 {
     const score_t isolatedpenalty = 50;
 
-    int i;
     team_e t;
 
     int8_t square, r;
-    bitboard_t mask;
+    bitboard_t bb, mask;
 
     for(t=0; t<TEAM_COUNT; t++)
     {
         bonus[t] = 0;
-        for(i=0; i<board->npiece[t]; i++)
+        bb = board->pboards[t][PIECE_PAWN];
+        while(bb)
         {
-            square = board->ptable[t][i];
-            if((board->sqrs[square] & SQUARE_MASK_TYPE) != PIECE_PAWN)
-                continue;
+            square = __builtin_ctzll(bb);
+            bb &= bb - 1;
 
             mask = eval_passedpawnmask(t, square);
 
@@ -92,27 +91,32 @@ static inline void eval_pawnstructure(board_t* board, score_t bonus[TEAM_COUNT])
 
 static inline void eval_positionbonus(board_t* board, float endgame, score_t bonus[TEAM_COUNT])
 {
-    int i;
     team_e t;
+    piece_e p;
 
-    piece_e piece;
+    bitboard_t bb;
     int square;
     float a, b;
 
     for(t=0; t<TEAM_COUNT; t++)
     {
         bonus[t] = 0;
-        for(i=0; i<board->npiece[t]; i++)
+        for(p=PIECE_KING; p<PIECE_COUNT; p++)
         {
-            square = board->ptable[t][i];
-            piece = board->sqrs[square] & SQUARE_MASK_TYPE;
-            if(t == TEAM_BLACK)
-                square = BOARD_AREA - square;
-            
-            a = eval_psqrtable[0][piece][square];
-            b = eval_psqrtable[1][piece][square];
+            bb = board->pboards[t][p];
+            while(bb)
+            {
+                square = __builtin_ctzll(bb);
+                bb &= bb - 1;
 
-            bonus[t] += a + (b - a) * endgame;
+                if(t == TEAM_BLACK)
+                    square = BOARD_AREA - square;
+            
+                a = eval_psqrtable[0][p][square];
+                b = eval_psqrtable[1][p][square];
+
+                bonus[t] += a + (b - a) * endgame;
+            }
         }
     }
 }
@@ -124,14 +128,14 @@ static inline float eval_endgameweight(score_t totalmaterial)
 
 static inline void eval_countmaterial(board_t* board, score_t material[TEAM_COUNT])
 {
-    int i;
     team_e t;
+    piece_e p;
 
     for(t=0; t<TEAM_COUNT; t++)
     {
         material[t] = 0;
-        for(i=0; i<board->npiece[t]; i++)
-            material[t] += eval_pscore[board->sqrs[board->ptable[t][i]] & SQUARE_MASK_TYPE];
+        for(p=PIECE_KING; p<PIECE_COUNT; p++)
+            material[t] += eval_pscore[p] * __builtin_popcountll(board->pboards[t][p]);
     }
 }
 

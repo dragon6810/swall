@@ -117,7 +117,7 @@ static inline void move_updateenpas(board_t* restrict board, move_t move, mademo
     if(piece != PIECE_PAWN)
         return;
 
-    if(abs(dst - src) == BOARD_LEN * 2)
+    if((dst ^ src) == BOARD_LEN * 2)
         board->enpas = src + PAWN_OFFS(team);
 }
 
@@ -211,7 +211,7 @@ static inline void move_makehash(board_t* restrict board, move_t move)
     if(board->enpas != 0xFF && (board->pboards[board->tomove][PIECE_PAWN] & pawnatk[!board->tomove][board->enpas]))
         board->hash ^= zobrist_hashes[772 + board->enpas % BOARD_LEN];
 
-    if(piece == PIECE_PAWN && abs(dst - src) == BOARD_LEN * 2 
+    if(piece == PIECE_PAWN && (dst ^ src) == BOARD_LEN * 2 
     && board->pboards[!team][PIECE_PAWN] & pawnatk[team][src + PAWN_OFFS(team)])
         board->hash ^= zobrist_hashes[772 + dst % BOARD_LEN];
 
@@ -316,7 +316,6 @@ void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmov
     board->pboards[team][newtype] |= dstmask;
 
     board->tomove = !board->tomove;
-    board_findpieces(board);
     board_checkstalemate(board);
     board->history[board->nhistory++] = board->hash;
 }
@@ -379,7 +378,6 @@ void move_unmake(board_t* restrict board, const mademove_t* restrict move)
     board->tomove = team;
     board->nhistory--;
 
-    board_findpieces(board);
     board->stalemate = false;
 }
 

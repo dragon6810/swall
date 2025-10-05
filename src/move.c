@@ -90,37 +90,46 @@ static inline void move_kingatk(board_t* restrict board, uint8_t src, team_e tea
 
 void move_findattacks(board_t* restrict board)
 {
-    int i;
+    piece_e p;
 
+    bitboard_t bb;
     team_e team;
+    int square;
 
     team = !board->tomove;
 
     board->attacks = 0;
-    for(i=0; i<board->npiece[team]; i++)
+    for(p=PIECE_KING; p<PIECE_COUNT; p++)
     {
-        switch(board->sqrs[board->ptable[team][i]] & SQUARE_MASK_TYPE)
+        bb = board->pboards[team][p];
+        while(bb)
         {
-        case PIECE_KING:
-            move_kingatk(board, board->ptable[team][i], team);
-            break;
-        case PIECE_QUEEN:
-            move_queenatk(board, board->ptable[team][i], team);
-            break;
-        case PIECE_ROOK:
-            move_rookatk(board, board->ptable[team][i], team);
-            break;
-        case PIECE_BISHOP:
-            move_bishopatk(board, board->ptable[team][i], team);
-            break;
-        case PIECE_KNIGHT:
-            move_knightatk(board, board->ptable[team][i], team);
-            break;
-        case PIECE_PAWN:
-            move_pawnatk(board, board->ptable[team][i], team);
-            break;
-        default:
-            break;
+            square = __builtin_ctzll(bb);
+            bb &= bb - 1;
+
+            switch(p)
+            {
+            case PIECE_KING:
+                move_kingatk(board, square, team);
+                break;
+            case PIECE_QUEEN:
+                move_queenatk(board, square, team);
+                break;
+            case PIECE_ROOK:
+                move_rookatk(board, square, team);
+                break;
+            case PIECE_BISHOP:
+                move_bishopatk(board, square, team);
+                break;
+            case PIECE_KNIGHT:
+                move_knightatk(board, square, team);
+                break;
+            case PIECE_PAWN:
+                move_pawnatk(board, square, team);
+                break;
+            default:
+                break;
+            }
         }
     }
 }
@@ -488,7 +497,10 @@ static inline void move_legalmoves(board_t* restrict board, moveset_t* restrict 
 
 void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool caponly)
 {
-    int i;
+    piece_e p;
+
+    bitboard_t bb;
+    int square;
 
     move_findattacks(board);
     board_findcheck(board);
@@ -498,8 +510,17 @@ void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool c
     if(board->stalemate)
         return;
 
-    for(i=0; i<board->npiece[board->tomove]; i++)
-        move_legalmoves(board, outmoves, board->ptable[board->tomove][i], caponly);
+    for(p=PIECE_KING; p<PIECE_COUNT; p++)
+    {
+        bb = board->pboards[board->tomove][p];
+        while(bb)
+        {
+            square = __builtin_ctzll(bb);
+            bb &= bb - 1;
+
+            move_legalmoves(board, outmoves, square, caponly);
+        }
+    }
 }
 
 move_t* move_findmove(moveset_t* set, move_t move)

@@ -10,34 +10,6 @@
 
 #include "move.h"
 
-void board_findpieces(board_t* board)
-{
-    int sqr;
-    
-    team_e t;
-    piece_e p;
-
-    board->npiece[TEAM_WHITE] = board->npiece[TEAM_BLACK] = 0;
-
-    for(sqr=0; sqr<BOARD_AREA; sqr++)
-    {
-        t = board->sqrs[sqr] >> SQUARE_BITS_TEAM;
-        p = board->sqrs[sqr] & SQUARE_MASK_TYPE;
-
-        if(!p)
-            continue;
-            
-        if(board->npiece[t] >= PIECE_MAX)
-        {
-            printf("board_findpieces: max pieces reached for team %s!\n", t ? "black" : "white");
-            board_print(board);
-            exit(1);
-        }
-
-        board->ptable[t][board->npiece[t]++] = sqr;
-    }
-}
-
 void board_findcheck(board_t* board)
 {
     board->check = board->pboards[board->tomove][PIECE_KING] & board->attacks;
@@ -384,7 +356,6 @@ void board_checkstalemate(board_t* board)
 
 void board_update(board_t* board)
 {
-    board_findpieces(board);
     move_findattacks(board);
     board_findcheck(board);
     board->hash = zobrist_hash(board);

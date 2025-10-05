@@ -234,20 +234,25 @@ const int zobrist_piecetohash[TEAM_COUNT][PIECE_COUNT] =
 // http://hgm.nubati.net/book_format.html
 uint64_t zobrist_hash(board_t* board)
 {
-    int t, p;
+    team_e t;
+    piece_e p;
 
+    bitboard_t bb;
+    uint8_t square;
     uint64_t hash;
-    piece_e type;
 
     hash = 0;
     for(t=0; t<TEAM_COUNT; t++)
     {
-        for(p=0; p<board->npiece[t]; p++)
+        for(p=PIECE_KING; p<PIECE_COUNT; p++)
         {
-            type = board->sqrs[board->ptable[t][p]] & SQUARE_MASK_TYPE;
-            assert(board->ptable[t][p] < BOARD_AREA);
-            assert((board->sqrs[board->ptable[t][p]] & SQUARE_MASK_TYPE) < PIECE_COUNT);
-            hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[t][type] + board->ptable[t][p]];
+            bb = board->pboards[t][p];
+            while(bb)
+            {
+                square = __builtin_ctzll(bb);
+                bb &= bb - 1;
+                hash ^= zobrist_hashes[BOARD_AREA * zobrist_piecetohash[t][p] + square];
+            }
         }
     }
 
