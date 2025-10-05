@@ -9,8 +9,13 @@
 #include "eval.h"
 #include "zobrist.h"
 
-#define MAX_KILLER 4
+#define MAX_KILLER 2
 #define MAX_DEPTH 64
+
+#define INFO_PERIOD_CLOCKS (100 * (CLOCKS_PER_SEC / 1000))
+
+#define SCORE_MATE 24000
+#define MATE_THRESH (SCORE_MATE - MAX_DEPTH)
 
 int ntranspos = 0, ncutnodes = 0, npvnodes = 0;
 clock_t searchstart;
@@ -19,6 +24,32 @@ int searchtime;
 move_t bestknown;
 int nkillers[MAX_DEPTH] = {};
 move_t killers[MAX_DEPTH][MAX_KILLER] = {};
+clock_t lastinfo;
+
+int curdepth = 0;
+int seldepth = 0;
+score_t curscore = 0;
+uint64_t nnodes;
+
+static inline void search_printinfo(board_t* board)
+{
+    lastinfo = clock();
+
+    printf("info");
+    printf(" depth %d", curdepth);
+    printf(" seldepth %d", seldepth);
+    printf(" time %llu", (uint64_t) ((double) (lastinfo - searchstart) / CLOCKS_PER_SEC * 1000));
+    if(curscore < MATE_THRESH && curscore > -MATE_THRESH)
+        printf(" score cp %d", curscore);
+    else if(curscore >= MATE_THRESH)
+        printf(" score mate %d", (SCORE_MATE - curscore) / 2 + 1);
+    else
+        printf(" score mate %d", (-SCORE_MATE + curscore) / 2 - 1);
+    printf(" nodes %llu", nnodes);
+    printf(" nps %llu", (uint64_t) ((double) nnodes / ((double) (clock() - searchstart) / CLOCKS_PER_SEC)));
+    printf(" hashfull %d", (int) ((double) board->ttable.occupancy / (double) board->ttable.size * 1000));
+    printf("\n");
+}
 
 static inline void search_sortmoves(moveset_t* moves, score_t* scores)
 {
@@ -114,13 +145,17 @@ static inline void search_order(board_t* board, moveset_t* moves, int plies, int
     search_sortmoves(moves, scores);
 }
 
-static score_t brain_quiesencesearch(board_t* board, score_t alpha, score_t beta)
+static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, score_t beta)
 {
     int i;
 
     score_t eval, besteval;
     moveset_t moves;
     mademove_t mademove;
+    
+    nnodes++;
+    if(plies > seldepth)
+        seldepth = plies;
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
     {
@@ -140,7 +175,7 @@ static score_t brain_quiesencesearch(board_t* board, score_t alpha, score_t beta
     for(i=0; i<moves.count; i++)
     {
         move_make(board, moves.moves[i], &mademove);
-        eval = -brain_quiesencesearch(board, -beta, -alpha);
+        eval = -brain_quiesencesearch(board, plies + 1, -beta, -alpha);
         move_unmake(board, &mademove);
 
         if(searchcanceled)
@@ -206,6 +241,13 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     bool capture;
     int ext;
 
+    nnodes++;
+    if(plies > seldepth)
+        seldepth = plies;
+
+    if(clock() - lastinfo >= INFO_PERIOD_CLOCKS)
+        search_printinfo(board);
+
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
     {
         searchcanceled = true;
@@ -226,7 +268,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     }
 
     if(!depth)
-        return brain_quiesencesearch(board, alpha, beta);
+        return brain_quiesencesearch(board, plies, alpha, beta);
 
     move_alllegal(board, &moves, false);
     search_order(board, &moves, plies, depth);
@@ -235,7 +277,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     {
         eval = 0; // stalemate
         if(board->check)
-            eval = -10000 + plies; // checkmate
+            eval = -SCORE_MATE + plies; // checkmate
 
         transpose_store(&board->ttable, board->hash, depth, eval, 0, TRANSPOS_PV);
         return eval;
@@ -301,7 +343,6 @@ move_t search(board_t* board, int timems)
     int i;
 
     move_t move;
-    char str[MAX_LONGALG];
     score_t score;
 
     ntranspos = ncutnodes = npvnodes = 0;
@@ -309,12 +350,18 @@ move_t search(board_t* board, int timems)
     searchtime = timems - 10;
     searchcanceled = false;
     bestknown = 0;
+    nnodes = 0;
+    seldepth = 0;
 
     if(book_findmove(board, &move))
         return move;
+
+    lastinfo = clock();
     
     for(i=1, move=0; i<MAX_DEPTH; i++)
     {
+        curdepth = i;
+
         memset(nkillers, 0, sizeof(nkillers));
 
         score = search_r(board, SCORE_MIN, SCORE_MAX, 0, i, 16, &move);
@@ -322,13 +369,11 @@ move_t search(board_t* board, int timems)
         if(searchcanceled)
             break;
 
-        move_tolongalg(move, str);
-        printf("depth: %d. best move: %s. score: %d.\n", i, str, score);
+        curscore = score;
+        search_printinfo(board);
 
         bestknown = move;
     }
-
-    printf("searched to depth %d 1/2 with %d transpositions, %d cut nodes, and %d pv nodes.\n", i - 1, ntranspos, ncutnodes, npvnodes);
 
     return move;
 }

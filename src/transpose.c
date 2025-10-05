@@ -9,6 +9,7 @@ void transpose_alloc(ttable_t* table, uint64_t sizekb)
 
     nel = sizekb * 1024 / sizeof(transpos_t);
     table->size = nel;
+    table->occupancy = 0;
     table->data = malloc(nel * sizeof(transpos_t));
     memset(table->data, 0, nel * sizeof(transpos_t));
 }
@@ -54,6 +55,8 @@ void transpose_store(ttable_t* table, uint64_t hash, uint8_t depth, score_t eval
         return;
 
     idx = hash % table->size;
+    if(!table->data[idx].hash)
+        table->occupancy++;
     table->data[idx].hash = hash;
     table->data[idx].depth = depth;
     table->data[idx].eval = eval;

@@ -26,6 +26,7 @@ typedef struct transpos_s
 typedef struct ttable_s
 {
     uint64_t size;
+    uint64_t occupancy;
     transpos_t *data;
 } ttable_t;
 
