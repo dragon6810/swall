@@ -323,7 +323,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         needsfullsearch = true;
         if(i > 2 && depth > 3 && !ext && !capture)
         {
-            eval = -search_r(board, -beta, -alpha, plies + 1, depth - 2, next - ext, NULL);
+            eval = -search_r(board, -beta, -alpha, plies + 1, depth - 4, next, NULL);
             needsfullsearch = eval > alpha;
         }
 
