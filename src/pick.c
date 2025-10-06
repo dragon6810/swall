@@ -27,11 +27,49 @@ static inline bool pick_trycapture(board_t* restrict board, move_t move, picker_
         capscore -= eval_pscore[piece];
 
     if(capscore >= 0)
+    {
+        picker->goodscores[picker->goodcap.count] = capscore;
         picker->goodcap.moves[picker->goodcap.count++] = move;
+    }
     else
+    {
+        picker->badscores[picker->badcap.count] = capscore;
         picker->badcap.moves[picker->badcap.count++] = move;
+    }
 
     return true;
+}
+
+static inline move_t pick_nextfromset(moveset_t* restrict set, score_t* restrict scores, int idx)
+{
+    int i;
+
+    int bestidx;
+    score_t bestscore;
+
+    bestidx = idx;
+    bestscore = scores[idx];
+    for(i=idx+1; i<set->count; i++)
+    {
+        if(scores[i] > bestscore)
+        {
+            bestidx = i;
+            bestscore = scores[i];
+        }
+    }
+
+    if(bestidx == idx)
+        return set->moves[bestidx];
+
+    set->moves[idx] ^= set->moves[bestidx];
+    set->moves[bestidx] ^= set->moves[idx];
+    set->moves[idx] ^= set->moves[bestidx];
+
+    scores[idx] ^= scores[bestidx];
+    scores[bestidx] ^= scores[idx];
+    scores[idx] ^= scores[bestidx];
+
+    return set->moves[idx];
 }
 
 void pick_sort(board_t* restrict board, moveset_t* restrict moves, 
@@ -117,13 +155,13 @@ move_t pick(picker_t* restrict picker)
         move = picker->checks.moves[picker->idx];
         break;
     case PICK_GOODCAP:
-        move = picker->goodcap.moves[picker->idx];
+        move = pick_nextfromset(&picker->goodcap, picker->goodscores, picker->idx);
         break;
     case PICK_QUIET:
         move = picker->quiet.moves[picker->idx];
         break;
     case PICK_BADCAP:
-        move = picker->badcap.moves[picker->idx];
+        move = pick_nextfromset(&picker->badcap, picker->badscores, picker->idx);
         break;
     default:
         move = 0;

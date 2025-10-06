@@ -12,7 +12,7 @@
 #include "zobrist.h"
 
 #define MAX_KILLER 2
-#define MAX_DEPTH 64
+#define MAX_DEPTH 256
 #define NULL_REDUCTION 3
 #define LMR_REDUCTION 3
 
@@ -48,7 +48,7 @@ static inline void search_printinfo(board_t* board)
     else if(curscore >= MATE_THRESH)
         printf(" score mate %d", (SCORE_MATE - curscore) / 2 + 1);
     else
-        printf(" score mate %d", (-SCORE_MATE + curscore) / 2 - 1);
+        printf(" score mate %d", (-SCORE_MATE - curscore) / 2 - 1);
     printf(" nodes %llu", nnodes);
     printf(" nps %llu", (uint64_t) ((double) nnodes / ((double) (clock() - searchstart) / CLOCKS_PER_SEC)));
     printf(" hashfull %d", (int) ((double) board->ttable.occupancy / (double) board->ttable.size * 1000));

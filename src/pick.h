@@ -21,6 +21,9 @@ typedef struct
     moveset_t quiet;
     moveset_t badcap;
 
+    score_t goodscores[MAX_MOVE];
+    score_t badscores[MAX_MOVE];
+
     pickstate_e state;
     uint8_t idx;
 } picker_t;
