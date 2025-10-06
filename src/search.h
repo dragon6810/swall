@@ -13,6 +13,7 @@
 extern int search_killeridx[MAX_DEPTH];
 extern move_t search_killers[MAX_DEPTH][MAX_KILLER];
 extern score_t search_history[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
+extern move_t search_counters[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 
 move_t search(board_t* board, int timems);
 

@@ -46,9 +46,9 @@ static inline void search_printinfo(board_t* board)
     if(curscore < MATE_THRESH && curscore > -MATE_THRESH)
         printf(" score cp %d", curscore);
     else if(curscore >= MATE_THRESH)
-        printf(" score mate %d", (SCORE_MATE - curscore) / 2 + 1);
+        printf(" score mate %d", (SCORE_MATE - curscore - 1) / 2 + 1);
     else
-        printf(" score mate %d", (-SCORE_MATE - curscore) / 2 - 1);
+        printf(" score mate %d", (-SCORE_MATE - curscore + 1) / 2 - 1);
     printf(" nodes %llu", nnodes);
     printf(" nps %llu", (uint64_t) ((double) nnodes / ((double) (clock() - searchstart) / CLOCKS_PER_SEC)));
     printf(" hashfull %d", (int) ((double) board->ttable.occupancy / (double) board->ttable.size * 1000));
@@ -139,7 +139,7 @@ static inline int brain_calcext(board_t* board, move_t move, int next)
 }
 
 // if search is canceled, dont trust the results!
-static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, int depth, int next, move_t* outmove)
+static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta, int plies, int depth, int next, move_t* outmove)
 {
     int i;
     move_t move;
@@ -152,7 +152,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     mademove_t mademove;
     transpos_type_e transpostype;
     bool needsfullsearch;
-    bool capture, check;
+    bool capture;
     bool checknull;
     int ext;
 
@@ -207,7 +207,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     if(checknull)
     {
         move_makenull(board, &mademove);
-        eval = -search_r(board, -beta, -beta + 1, plies + 1, depth - 1 - NULL_REDUCTION, next, NULL);
+        eval = -search_r(board, 0, -beta, -beta + 1, plies + 1, depth - 1 - NULL_REDUCTION, next, NULL);
         move_unmakenull(board, &mademove);
 
         if(eval >= beta)
@@ -228,18 +228,17 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         move_make(board, move, &mademove);
 
         capture = mademove.captured;
-        check = board->check;
         ext = brain_calcext(board, move, next);
 
         needsfullsearch = true;
         if(i > 2 && depth > LMR_REDUCTION && !ext && !capture)
         {
-            eval = -search_r(board, -beta, -alpha, plies + 1, depth - 1 - LMR_REDUCTION, next, NULL);
+            eval = -search_r(board, move, -beta, -alpha, plies + 1, depth - 1 - LMR_REDUCTION, next, NULL);
             needsfullsearch = eval > alpha;
         }
 
         if(needsfullsearch)
-            eval = -search_r(board, -beta, -alpha, plies + 1, depth - 1 + ext, next - ext, NULL);
+            eval = -search_r(board, move, -beta, -alpha, plies + 1, depth - 1 + ext, next - ext, NULL);
         
         move_unmake(board, &mademove);
 
@@ -248,9 +247,6 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
 
         if(eval > alpha)
         {
-            if(!capture && !check)
-                search_killers[depth][(search_killeridx[depth]++) % MAX_KILLER] = move;
-
             transpostype = TRANSPOS_PV;
 
             alpha = eval;
@@ -261,7 +257,11 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         if(alpha >= beta)
         {
             ncutnodes++;
-            search_history[board->tomove][move & MOVEBITS_SRC_MASK][(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] += depth;
+            if(!capture)
+            {
+                search_killers[depth][(search_killeridx[depth]++) % MAX_KILLER] = move;
+                search_history[board->tomove][move & MOVEBITS_SRC_MASK][(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] += depth;
+            }
             transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;
         }
@@ -306,7 +306,7 @@ move_t search(board_t* board, int timems)
         memset(search_killers, 0, sizeof(search_killers));
         memset(search_history, 0, sizeof(search_history));
 
-        score = search_r(board, SCORE_MIN, SCORE_MAX, 0, i, 16, &move);
+        score = search_r(board, 0, SCORE_MIN, SCORE_MAX, 0, i, 16, &move);
         
         if(searchcanceled)
             break;
