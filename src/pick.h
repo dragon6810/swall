@@ -3,12 +3,14 @@
 
 #include "board.h"
 #include "move.h"
+#include "search.h"
 
 typedef enum
 {
     PICK_TT=0,
     PICK_CHECKS,
     PICK_GOODCAP,
+    PICK_KILLERS,
     PICK_QUIET,
     PICK_BADCAP,
 } pickstate_e;
@@ -18,6 +20,8 @@ typedef struct
     move_t tt;
     moveset_t checks;
     moveset_t goodcap;
+    uint8_t nkillers;
+    move_t killers[MAX_KILLER];
     moveset_t quiet;
     moveset_t badcap;
 
@@ -29,7 +33,7 @@ typedef struct
 } picker_t;
 
 void pick_sort(board_t* restrict board, moveset_t* restrict moves, 
-uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker);
+int plies, uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker);
 move_t pick(picker_t* restrict picker);
 
 #endif

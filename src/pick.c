@@ -40,6 +40,22 @@ static inline bool pick_trycapture(board_t* restrict board, move_t move, picker_
     return true;
 }
 
+static inline bool pick_trykiller(move_t move, int plies, picker_t* restrict picker)
+{
+    int i;
+    
+    for(i=0; i<MAX_KILLER; i++)
+    {
+        if(move != search_killers[plies][i])
+            continue;
+
+        picker->killers[picker->nkillers++] = move;
+        return true;
+    }
+
+    return false;
+}
+
 static inline move_t pick_nextfromset(moveset_t* restrict set, score_t* restrict scores, int idx)
 {
     int i;
@@ -73,7 +89,7 @@ static inline move_t pick_nextfromset(moveset_t* restrict set, score_t* restrict
 }
 
 void pick_sort(board_t* restrict board, moveset_t* restrict moves, 
-uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker)
+int plies, uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker)
 {
     int i;
 
@@ -83,6 +99,7 @@ uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker)
     picker->tt = 0;
     picker->checks.count = 0;
     picker->goodcap.count = 0;
+    picker->nkillers = 0;
     picker->quiet.count = 0;
     picker->badcap.count = 0;
 
@@ -102,6 +119,9 @@ uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker)
             picker->state = PICK_TT;
             continue;
         }
+
+        if(pick_trykiller(moves->moves[i], plies, picker))
+            continue;
 
         if(pick_trycapture(board, moves->moves[i], picker))
             continue;
@@ -135,6 +155,11 @@ move_t pick(picker_t* restrict picker)
         picker->state++;
         picker->idx = 0;
     }
+    if(picker->state == PICK_KILLERS && picker->idx >= picker->nkillers)
+    {
+        picker->state++;
+        picker->idx = 0;
+    }
     if(picker->state == PICK_QUIET && picker->idx >= picker->quiet.count)
     {
         picker->state++;
@@ -156,6 +181,9 @@ move_t pick(picker_t* restrict picker)
         break;
     case PICK_GOODCAP:
         move = pick_nextfromset(&picker->goodcap, picker->goodscores, picker->idx);
+        break;
+    case PICK_KILLERS:
+        move = picker->killers[picker->idx];
         break;
     case PICK_QUIET:
         move = picker->quiet.moves[picker->idx];

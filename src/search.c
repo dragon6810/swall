@@ -11,8 +11,6 @@
 #include "pick.h"
 #include "zobrist.h"
 
-#define MAX_KILLER 2
-#define MAX_DEPTH 256
 #define NULL_REDUCTION 3
 #define LMR_REDUCTION 3
 
@@ -21,13 +19,14 @@
 #define SCORE_MATE 24000
 #define MATE_THRESH (SCORE_MATE - MAX_DEPTH)
 
+int search_killeridx[MAX_DEPTH];
+move_t search_killers[MAX_DEPTH][MAX_KILLER];
+
 int ntranspos = 0, ncutnodes = 0, npvnodes = 0;
 clock_t searchstart;
 bool searchcanceled;
 int searchtime;
 move_t bestknown;
-int nkillers[MAX_DEPTH] = {};
-move_t killers[MAX_DEPTH][MAX_KILLER] = {};
 clock_t lastinfo;
 
 int curdepth = 0;
@@ -82,7 +81,7 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
     move_gensetup(board);
     move_alllegal(board, &moves, true);
     
-    pick_sort(board, &moves, -1, alpha, beta, &picker);
+    pick_sort(board, &moves, plies, -1, alpha, beta, &picker);
 
     while((move = pick(&picker)))
     {
@@ -152,7 +151,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
     mademove_t mademove;
     transpos_type_e transpostype;
     bool needsfullsearch;
-    bool capture;
+    bool capture, check;
     bool checknull;
     int ext;
 
@@ -218,7 +217,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         }
     }
 
-    pick_sort(board, &moves, depth, alpha, beta, &picker);
+    pick_sort(board, &moves, plies, depth, alpha, beta, &picker);
 
     i = 0;
     bestmove = 0;
@@ -228,6 +227,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         move_make(board, move, &mademove);
 
         capture = mademove.captured;
+        check = board->check;
         ext = brain_calcext(board, move, next);
 
         needsfullsearch = true;
@@ -247,8 +247,8 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
 
         if(eval > alpha)
         {
-            if(!capture && nkillers[depth] < MAX_KILLER)
-                killers[depth][nkillers[depth]++] = move;
+            if(!capture && !check)
+                search_killers[depth][(search_killeridx[depth]++) % MAX_KILLER] = move;
 
             transpostype = TRANSPOS_PV;
 
@@ -300,7 +300,8 @@ move_t search(board_t* board, int timems)
     {
         curdepth = i;
 
-        memset(nkillers, 0, sizeof(nkillers));
+        memset(search_killeridx, 0, sizeof(search_killeridx));
+        memset(search_killers, 0, sizeof(search_killers));
 
         score = search_r(board, SCORE_MIN, SCORE_MAX, 0, i, 16, &move);
         
