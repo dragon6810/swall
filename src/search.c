@@ -8,10 +8,13 @@
 
 #include "book.h"
 #include "eval.h"
+#include "pick.h"
 #include "zobrist.h"
 
 #define MAX_KILLER 2
 #define MAX_DEPTH 64
+#define NULL_REDUCTION 3
+#define LMR_REDUCTION 3
 
 #define INFO_PERIOD_CLOCKS (100 * (CLOCKS_PER_SEC / 1000))
 
@@ -52,106 +55,12 @@ static inline void search_printinfo(board_t* board)
     printf("\n");
 }
 
-static inline void search_sortmoves(moveset_t* moves, score_t* scores)
-{
-    int i, j;
-
-    score_t bestscore;
-    int bestidx;
-    move_t tempmv;
-    score_t tempscore;
-
-    for(i=0; i<moves->count; i++)
-    {
-        bestidx = i;
-        bestscore = scores[i];
-
-        for(j=i+1; j<moves->count; j++)
-        {
-            if(scores[j] > bestscore)
-            {
-                bestscore = scores[j];
-                bestidx = j;
-            }
-        }
-
-        if(bestidx == i)
-            continue;
-
-        tempmv = moves->moves[i];
-        moves->moves[i] = moves->moves[bestidx];
-        moves->moves[bestidx] = tempmv;
-
-        tempscore = scores[i];
-        scores[i] = scores[bestidx];
-        scores[bestidx] = tempscore;
-    }
-}
-
-static inline score_t brain_moveguess(board_t* board, move_t mv, int plies, int depth)
-{
-    int i;
-    
-    score_t score;
-    bitboard_t dstmask;
-    int src, dst, type;
-    piece_e psrc, pdst;
-    transpos_t *transpos;
-
-    if(!plies && mv == bestknown)
-        return 9960;
-
-    transpos = transpose_find(&board->ttable, board->hash, 0, INT16_MIN + 1, INT16_MAX, true);
-    if(transpos && transpos->bestmove == mv)
-        return 9950; // a little less than mate
-
-    // killers
-    if(depth >= 0)
-        for(i=0; i<nkillers[depth]; i++)
-            if(killers[depth][i] == mv)
-                return 9940;
-
-    src = (mv & MOVEBITS_SRC_MASK) >> MOVEBITS_SRC_BITS;
-    dst = (mv & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-    type = (mv & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
-
-    dstmask = (uint64_t) 1 << dst;
-
-    score = 0;
-    if(type >= MOVETYPE_PROMQ && type <= MOVETYPE_PROMN)
-        score += eval_pscore[PIECE_QUEEN + (type - MOVETYPE_PROMQ)];
-
-    psrc = board->sqrs[src] & SQUARE_MASK_TYPE;
-    pdst = board->sqrs[dst] & SQUARE_MASK_TYPE;
-
-    // capture opponent
-    if(pdst)
-        score += eval_pscore[pdst];
-
-    // opponent captures us
-    if(board->attacks & dstmask)
-        score -= eval_pscore[psrc];
-
-    return score;
-}
-
-static inline void search_order(board_t* board, moveset_t* moves, int plies, int depth)
-{
-    int i;
-
-    score_t scores[MAX_MOVE];
-
-    for(i=0; i<moves->count; i++)
-        scores[i] = brain_moveguess(board, moves->moves[i], plies, depth);
-    search_sortmoves(moves, scores);
-}
-
 static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, score_t beta)
 {
-    int i;
-
     score_t eval, besteval;
     moveset_t moves;
+    picker_t picker;
+    move_t move;
     mademove_t mademove;
     
     nnodes++;
@@ -172,11 +81,12 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
 
     move_gensetup(board);
     move_alllegal(board, &moves, true);
-    search_order(board, &moves, -1, -1);
+    
+    pick_sort(board, &moves, -1, alpha, beta, &picker);
 
-    for(i=0; i<moves.count; i++)
+    while((move = pick(&picker)))
     {
-        move_make(board, moves.moves[i], &mademove);
+        move_make(board, move, &mademove);
         eval = -brain_quiesencesearch(board, plies + 1, -beta, -alpha);
         move_unmake(board, &mademove);
 
@@ -199,7 +109,7 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
     return besteval;
 }
 
-static int brain_calcext(board_t* board, move_t move, int next)
+static inline int brain_calcext(board_t* board, move_t move, int next)
 {
     int ext;
 
@@ -232,9 +142,11 @@ static int brain_calcext(board_t* board, move_t move, int next)
 static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, int depth, int next, move_t* outmove)
 {
     int i;
+    move_t move;
 
     transpos_t *transpos;
     moveset_t moves;
+    picker_t picker;
     score_t eval;
     move_t bestmove;
     mademove_t mademove;
@@ -275,19 +187,27 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
 
     move_gensetup(board);
     move_alllegal(board, &moves, false);
+
+    if(!moves.count)
+    {
+        eval = 0; // stalemate
+        if(board->check)
+            eval = -SCORE_MATE + plies; // checkmate
+
+        // i think that since mate needs plies, we can't store transposition here
+        return eval;
+    }
     
-    // not in check, and not in king-and-pawn endgame
-    checknull = !board->check 
-    && !board->stalemate
+    // not in check, not in king-and-pawn endgame, and depth > 3
+    checknull = !board->check
     && ((board->pboards[board->tomove][PIECE_KING] | board->pboards[board->tomove][PIECE_PAWN])
     != board->pboards[board->tomove][PIECE_NONE])
-    && depth > 3;
+    && depth > NULL_REDUCTION;
 
     if(checknull)
     {
-        assert(!board->check);
         move_makenull(board, &mademove);
-        eval = -search_r(board, -beta, -beta + 1, plies + 1, depth - 1 - 3, next, NULL);
+        eval = -search_r(board, -beta, -beta + 1, plies + 1, depth - 1 - NULL_REDUCTION, next, NULL);
         move_unmakenull(board, &mademove);
 
         if(eval >= beta)
@@ -298,32 +218,22 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         }
     }
 
-    search_order(board, &moves, plies, depth);
+    pick_sort(board, &moves, depth, alpha, beta, &picker);
 
-    if(!moves.count)
-    {
-        eval = 0; // stalemate
-        if(board->check)
-            eval = -SCORE_MATE + plies; // checkmate
-
-        transpose_store(&board->ttable, board->hash, depth, eval, 0, TRANSPOS_PV);
-        return eval;
-    }
-
+    i = 0;
     bestmove = 0;
     transpostype = TRANSPOS_UPPER;
-    for(i=0; i<moves.count; i++)
+    while((move = pick(&picker)))
     {
-        capture = board->sqrs[(moves.moves[i] & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS];
+        move_make(board, move, &mademove);
 
-        move_make(board, moves.moves[i], &mademove);
-
-        ext = brain_calcext(board, moves.moves[i], next);
+        capture = mademove.captured;
+        ext = brain_calcext(board, move, next);
 
         needsfullsearch = true;
-        if(i > 2 && depth > 3 && !ext && !capture)
+        if(i > 2 && depth > LMR_REDUCTION && !ext && !capture)
         {
-            eval = -search_r(board, -beta, -alpha, plies + 1, depth - 4, next, NULL);
+            eval = -search_r(board, -beta, -alpha, plies + 1, depth - 1 - LMR_REDUCTION, next, NULL);
             needsfullsearch = eval > alpha;
         }
 
@@ -338,12 +248,12 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         if(eval > alpha)
         {
             if(!capture && nkillers[depth] < MAX_KILLER)
-                killers[depth][nkillers[depth]++] = moves.moves[i];
+                killers[depth][nkillers[depth]++] = move;
 
             transpostype = TRANSPOS_PV;
 
             alpha = eval;
-            bestmove = moves.moves[i];
+            bestmove = move;
         }
 
         // move was so good that opponent will never let us get to this point
@@ -353,6 +263,8 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
             transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;
         }
+
+        i++;
     }
     
     npvnodes++;
