@@ -21,6 +21,7 @@
 
 int search_killeridx[MAX_DEPTH];
 move_t search_killers[MAX_DEPTH][MAX_KILLER];
+score_t search_history[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 
 int ntranspos = 0, ncutnodes = 0, npvnodes = 0;
 clock_t searchstart;
@@ -260,6 +261,7 @@ static score_t search_r(board_t* board, score_t alpha, score_t beta, int plies, 
         if(alpha >= beta)
         {
             ncutnodes++;
+            search_history[board->tomove][move & MOVEBITS_SRC_MASK][(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] += depth;
             transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;
         }
@@ -302,6 +304,7 @@ move_t search(board_t* board, int timems)
 
         memset(search_killeridx, 0, sizeof(search_killeridx));
         memset(search_killers, 0, sizeof(search_killers));
+        memset(search_history, 0, sizeof(search_history));
 
         score = search_r(board, SCORE_MIN, SCORE_MAX, 0, i, 16, &move);
         

@@ -26,6 +26,7 @@ typedef struct
     moveset_t badcap;
 
     score_t goodscores[MAX_MOVE];
+    score_t quietscores[MAX_MOVE];
     score_t badscores[MAX_MOVE];
 
     pickstate_e state;

@@ -2,6 +2,15 @@
 
 #include "eval.h"
 
+static inline score_t pick_scorequiet(board_t* restrict board, move_t move)
+{
+    score_t score;
+
+    score = search_history[board->tomove][move & MOVEBITS_SRC_MASK][(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS];
+
+    return score;
+}
+
 static inline bool pick_trycapture(board_t* restrict board, move_t move, picker_t* restrict picker)
 {
     movetype_e type;
@@ -22,9 +31,7 @@ static inline bool pick_trycapture(board_t* restrict board, move_t move, picker_
 
     piece = board->sqrs[src] & SQUARE_MASK_TYPE;
 
-    capscore = eval_pscore[capture];
-    if(board->attacks & (bitboard_t) 1 << src)
-        capscore -= eval_pscore[piece];
+    capscore = eval_pscore[capture] - eval_pscore[piece];
 
     if(capscore >= 0)
     {
@@ -43,7 +50,7 @@ static inline bool pick_trycapture(board_t* restrict board, move_t move, picker_
 static inline bool pick_trykiller(move_t move, int plies, picker_t* restrict picker)
 {
     int i;
-    
+
     for(i=0; i<MAX_KILLER; i++)
     {
         if(move != search_killers[plies][i])
@@ -132,6 +139,7 @@ int plies, uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker
             continue;
         }
 
+        picker->quietscores[picker->quiet.count] = pick_scorequiet(board, moves->moves[i]);
         picker->quiet.moves[picker->quiet.count++] = moves->moves[i];
     }
 }
@@ -186,7 +194,7 @@ move_t pick(picker_t* restrict picker)
         move = picker->killers[picker->idx];
         break;
     case PICK_QUIET:
-        move = picker->quiet.moves[picker->idx];
+        move = pick_nextfromset(&picker->quiet, picker->quietscores, picker->idx);
         break;
     case PICK_BADCAP:
         move = pick_nextfromset(&picker->badcap, picker->badscores, picker->idx);
