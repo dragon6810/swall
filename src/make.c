@@ -320,7 +320,9 @@ void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmov
     board->pboards[team][PIECE_NONE] |= dstmask;
     board->pboards[team][newtype] |= dstmask;
 
+    board->nhistory++;
     board->tomove = !board->tomove;
+    
     board_checkstalemate(board);
 }
 
@@ -377,6 +379,7 @@ void move_unmake(board_t* restrict board, const mademove_t* restrict move)
         board->pboards[!team][move->captured] ^= dstmask;
     }
     
+    board->nhistory--;
     board->tomove = team;
     board->stalemate = false;
 }

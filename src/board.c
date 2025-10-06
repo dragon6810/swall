@@ -340,7 +340,7 @@ void board_checkstalemate(board_t* board)
         return;
     }
     
-    for(i=board->lastperm, repetitions=0; i<board->nhistory; i++)
+    for(i=board->lastperm, repetitions=1; i<board->nhistory; i++)
     {
         if(board->history[i] != board->hash)
             continue;
