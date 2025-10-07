@@ -291,6 +291,8 @@ void move_make(board_t* restrict board, move_t move, mademove_t* restrict outmov
     team = board->tomove;
     ptype = board->sqrs[src] & SQUARE_MASK_TYPE;
 
+    board->history[board->nhistory] = board->hash;
+
     move_copytomade(board, move, outmove);
     move_makehash(board, move);
     move_updatelastperm(board, move);
