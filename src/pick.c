@@ -31,7 +31,7 @@ static inline bool pick_trycapture(board_t* restrict board, move_t move, picker_
 
     piece = board->sqrs[src] & SQUARE_MASK_TYPE;
 
-    capscore = eval_pscore[capture] - eval_pscore[piece];
+    capscore = eval_pscore[capture] * 10 - eval_pscore[piece];
 
     if(capscore >= 0)
     {
@@ -95,7 +95,7 @@ static inline move_t pick_nextfromset(moveset_t* restrict set, score_t* restrict
     return set->moves[idx];
 }
 
-void pick_sort(board_t* restrict board, moveset_t* restrict moves, 
+void pick_sort(board_t* restrict board, moveset_t* restrict moves, move_t prev,
 int plies, uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker)
 {
     int i;
@@ -106,6 +106,7 @@ int plies, uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker
     picker->tt = 0;
     picker->checks.count = 0;
     picker->goodcap.count = 0;
+    picker->counter = 0;
     picker->nkillers = 0;
     picker->quiet.count = 0;
     picker->badcap.count = 0;
@@ -124,6 +125,13 @@ int plies, uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker
         {
             picker->tt = tt;
             picker->state = PICK_TT;
+            continue;
+        }
+
+        if(prev && (moves->moves[i] 
+        == search_counters[board->tomove][prev & MOVEBITS_SRC_MASK][(prev & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS]))
+        {
+            picker->counter = moves->moves[i];
             continue;
         }
 
@@ -163,6 +171,11 @@ move_t pick(picker_t* restrict picker)
         picker->state++;
         picker->idx = 0;
     }
+    if(picker->state == PICK_COUNTER && (!picker->counter || picker->idx))
+    {
+        picker->state++;
+        picker->idx = 0;
+    }
     if(picker->state == PICK_KILLERS && picker->idx >= picker->nkillers)
     {
         picker->state++;
@@ -189,6 +202,9 @@ move_t pick(picker_t* restrict picker)
         break;
     case PICK_GOODCAP:
         move = pick_nextfromset(&picker->goodcap, picker->goodscores, picker->idx);
+        break;
+    case PICK_COUNTER:
+        move = picker->counter;
         break;
     case PICK_KILLERS:
         move = picker->killers[picker->idx];
