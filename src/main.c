@@ -261,8 +261,6 @@ void uci_cmd_position(const char* args)
         board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     }
 
-    transpose_alloc(&board.ttable, 64 * 1024);
-
     board_update(&board);
 
     while(*args && *args <= 32)
@@ -292,7 +290,7 @@ void uci_cmd_isready(void)
 void uci_cmd_ucinewgame(void)
 {
     board_loadfen(&board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    transpose_clear(&board.ttable);
+    transpose_clear(&search_ttable);
     board_update(&board);
 }
 
@@ -309,8 +307,6 @@ void uci_main(void)
     char *c;
 
     uci_cmd_ucinewgame();
-    
-    transpose_alloc(&board.ttable, 128 * 1024);
 
     while(1)
     {
@@ -341,8 +337,6 @@ void uci_main(void)
         else if(!strncmp(line, "quit", 4))
             break;
     }
-
-    transpose_free(&board.ttable);
 }
 
 int main(int argc, char** argv)
@@ -355,6 +349,7 @@ int main(int argc, char** argv)
     move_init();
     magic_init();
     book_load("baron30.bin");
+    search_init();
 
     printf("swall v%d.%d by Henry Dunn\n", VERSION_MAJ, VERSION_MIN);
     uci_main();

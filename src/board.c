@@ -133,9 +133,7 @@ int board_loadfen(board_t* board, const char* fen)
 
     bool black;
     char pc;
-
-    if(board->ttable.data)
-        transpose_free(&board->ttable);
+    
     memset(board, 0, sizeof(board_t));
 
     r = BOARD_LEN-1;

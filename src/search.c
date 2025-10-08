@@ -25,6 +25,7 @@ int search_killeridx[MAX_DEPTH];
 move_t search_killers[MAX_DEPTH][MAX_KILLER];
 score_t search_history[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 move_t search_counters[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
+ttable_t search_ttable;
 
 int ntranspos = 0, ncutnodes = 0, npvnodes = 0;
 clock_t searchstart;
@@ -54,7 +55,7 @@ static inline void search_printinfo(board_t* board)
         printf(" score mate %d", (-SCORE_MATE - curscore + 1) / 2 - 1);
     printf(" nodes %llu", nnodes);
     printf(" nps %llu", (uint64_t) ((double) nnodes / ((double) (clock() - searchstart) / CLOCKS_PER_SEC)));
-    printf(" hashfull %d", (int) ((double) board->ttable.occupancy / (double) board->ttable.size * 1000));
+    printf(" hashfull %d", (int) ((double) search_ttable.occupancy / (double) search_ttable.size * 1000));
     printf("\n");
 
     printf("info string outdegree %f\n", ((double) nnodes - 1) / (double) nnonterminal);
@@ -185,7 +186,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     if(board->stalemate)
         return 0;
 
-    transpos = transpose_find(&board->ttable, board->hash, depth, alpha, beta, false);
+    transpos = transpose_find(&search_ttable, board->hash, depth, alpha, beta, false);
     if(transpos)
     {
         ntranspos++;
@@ -227,7 +228,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         if(eval >= beta)
         {
             ncutnodes++;
-            transpose_store(&board->ttable, board->hash, depth, eval, 0, TRANSPOS_LOWER);
+            transpose_store(&search_ttable, board->hash, depth, eval, 0, TRANSPOS_LOWER);
             return eval;
         }
     }
@@ -300,7 +301,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
                 search_history[board->tomove][move & MOVEBITS_SRC_MASK][(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] += depth;
                 search_counters[board->tomove][prev & MOVEBITS_SRC_MASK][(prev & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] = bestmove;
             }
-            transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
+            transpose_store(&search_ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;
         }
 
@@ -312,7 +313,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     if(outmove)
         *outmove = bestmove;
 
-    transpose_store(&board->ttable, board->hash, depth, alpha, bestmove, transpostype);
+    transpose_store(&search_ttable, board->hash, depth, alpha, bestmove, transpostype);
     return alpha;
 }
 
@@ -357,4 +358,9 @@ move_t search(board_t* board, int timems)
     }
 
     return move;
+}
+
+void search_init(void)
+{
+    transpose_alloc(&search_ttable, 64 * 1024);
 }

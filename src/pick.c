@@ -115,7 +115,7 @@ int plies, uint8_t depth, score_t alpha, score_t beta, picker_t* restrict picker
     picker->idx = 0;
 
     tt = 0;
-    transpos = transpose_find(&board->ttable, board->hash, depth, alpha, beta, true);
+    transpos = transpose_find(&search_ttable, board->hash, depth, alpha, beta, true);
     if(transpos)
         tt = transpos->bestmove;
 

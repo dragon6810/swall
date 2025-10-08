@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "transpose.h"
 #include "zobrist.h"
 
 #define BOARD_LEN 8
@@ -83,8 +82,6 @@ typedef struct board_s
     uint8_t enpas; // on the last move, did a pawn just move two squares? if so, the target. else 0xFF
     bool kcastle[TEAM_COUNT]; // starts at true, false if the team's kingside rook moves
     bool qcastle[TEAM_COUNT]; // starts at true, false if the team's queenside rook moves
-
-    ttable_t ttable;
 } board_t;
 
 void board_findcheck(board_t* board);
