@@ -12,7 +12,7 @@
 #include "zobrist.h"
 
 #define NULL_REDUCTION 3
-#define LMR_REDUCTION 3
+#define LMR_REDUCTION 2
 
 #define INFO_PERIOD_CLOCKS (100 * (CLOCKS_PER_SEC / 1000))
 
@@ -34,7 +34,7 @@ clock_t lastinfo;
 int curdepth = 0;
 int seldepth = 0;
 score_t curscore = 0;
-uint64_t nnodes;
+uint64_t nnodes, nnonterminal;
 
 static inline void search_printinfo(board_t* board)
 {
@@ -54,6 +54,8 @@ static inline void search_printinfo(board_t* board)
     printf(" nps %llu", (uint64_t) ((double) nnodes / ((double) (clock() - searchstart) / CLOCKS_PER_SEC)));
     printf(" hashfull %d", (int) ((double) board->ttable.occupancy / (double) board->ttable.size * 1000));
     printf("\n");
+
+    printf("info string outdegree %f\n", ((double) nnodes - 1) / (double) nnonterminal);
 }
 
 static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, score_t beta)
@@ -84,6 +86,9 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
     move_alllegal(board, &moves, true);
     
     pick_sort(board, &moves, 0, plies, -1, alpha, beta, &picker);
+
+    if(moves.count)
+        nnonterminal++;
 
     while((move = pick(&picker)))
     {
@@ -148,7 +153,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     transpos_t *transpos;
     moveset_t moves;
     picker_t picker;
-    score_t eval;
+    score_t eval, margin;
     move_t bestmove;
     mademove_t mademove;
     transpos_type_e transpostype;
@@ -198,6 +203,8 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         // i think that since mate needs plies, we can't store transposition here
         return eval;
     }
+
+    nnonterminal++;
     
     // not in check, not in king-and-pawn endgame, and depth > 3
     checknull = !board->check
@@ -226,13 +233,22 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     transpostype = TRANSPOS_UPPER;
     while((move = pick(&picker)))
     {
+        capture = (board->sqrs[(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & SQUARE_MASK_TYPE) != PIECE_NONE;
+
+        if(depth <= 3 && !move_givescheck(board, move) && !capture && alpha < MATE_THRESH && beta > -MATE_THRESH)
+        {
+            margin = 128 * depth;
+            eval = evaluate(board);
+            if(eval + margin <= alpha && !capture)
+                continue;
+        }
+
         move_make(board, move, &mademove);
 
-        capture = mademove.captured;
         ext = brain_calcext(board, move, next);
 
         needsfullsearch = true;
-        if(i > 2 && depth > LMR_REDUCTION && !ext && !capture)
+        if(i >= 2 && depth > LMR_REDUCTION && !ext && !capture)
         {
             eval = -search_r(board, move, -beta, -alpha, plies + 1, depth - 1 - LMR_REDUCTION, next, NULL);
             needsfullsearch = eval > alpha;
@@ -292,7 +308,7 @@ move_t search(board_t* board, int timems)
     searchtime = timems - 10;
     searchcanceled = false;
     bestknown = 0;
-    nnodes = 0;
+    nnodes = nnonterminal = 0;
     seldepth = 0;
 
     if(book_findmove(board, &move))
