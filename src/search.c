@@ -243,7 +243,11 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         reduction = 0;
         capture = (board->sqrs[(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & SQUARE_MASK_TYPE) != PIECE_NONE;
 
-        if(depth <= 3 && !move_givescheck(board, move) && !capture && alpha < MATE_THRESH && beta > -MATE_THRESH)
+        // futility pruning
+        // if the move probably can't raise alpha (static eval + margin), don't even search it.
+        // only do it towards leaves, and if there is no capture, check, or mate.
+        // also don't do it if side to move is in check.
+        if(depth <= 3 && !board->check && !move_givescheck(board, move) && !capture && alpha < MATE_THRESH && beta > -MATE_THRESH)
         {
             margin = 128 * depth;
             eval = evaluate(board);
@@ -257,7 +261,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         childalpha = -beta;
         childbeta = -alpha;
 
-        if(i)
+        if(i || !picker.tt)
             childalpha = -alpha - 1;
 
         move_make(board, move, &mademove);
@@ -272,7 +276,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         if(reduction && eval > alpha)
             eval = -search_r(board, move, childalpha, childbeta, plies + 1, depth - 1 + ext, next - ext, NULL);
 
-        if(i && eval > alpha)
+        if((i || !picker.tt) && eval > alpha)
             eval = -search_r(board, move, -beta, -alpha, plies + 1, depth - 1 + ext, next - ext, NULL);
 
         move_unmake(board, &mademove);
