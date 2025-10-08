@@ -19,6 +19,8 @@
 #define SCORE_MATE 24000
 #define MATE_THRESH (SCORE_MATE - MAX_DEPTH)
 
+#define DELTA_MARGIN (eval_pscore[PIECE_QUEEN] + 256)
+
 int search_killeridx[MAX_DEPTH];
 move_t search_killers[MAX_DEPTH][MAX_KILLER];
 score_t search_history[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
@@ -81,6 +83,9 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
         return besteval;
     if(besteval > alpha)
         alpha = besteval;
+
+    if(eval + DELTA_MARGIN < alpha)
+        return eval;
 
     move_gensetup(board);
     move_alllegal(board, &moves, true);
@@ -239,7 +244,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         {
             margin = 128 * depth;
             eval = evaluate(board);
-            if(eval + margin <= alpha && !capture)
+            if(eval + margin <= alpha)
                 continue;
         }
 
@@ -265,6 +270,9 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         if(eval > alpha)
         {
             transpostype = TRANSPOS_PV;
+
+            if(!plies)
+                curdepth = eval;
 
             alpha = eval;
             bestmove = move;
