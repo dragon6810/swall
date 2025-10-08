@@ -126,8 +126,8 @@ bool book_findmove(board_t* board, move_t* outmove)
     int i;
     
     int weightsum;
-    float accumweight, scaledweight;
-    float random;
+    int accumweight;
+    int random;
 
     for(i=weightsum=0; i<nentrites; i++)
     {
@@ -140,21 +140,20 @@ bool book_findmove(board_t* board, move_t* outmove)
     if(!weightsum)
         return false;
 
-    random = (double) rand() / (double) RAND_MAX;
+    random = rand() % weightsum;
 
     for(i=0, accumweight=0; i<nentrites; i++)
     {
         if(entries[i].key != board->hash)
             continue;
 
-        scaledweight = (double) entries[i].weight / (double) weightsum;
-        accumweight += scaledweight;
+        accumweight += entries[i].weight;
 
-        if(random < accumweight - scaledweight || random > accumweight)
-            continue;
-
-        *outmove = book_fromentry(board, &entries[i]);
-        return true;
+        if(random < accumweight)
+        {
+            *outmove = book_fromentry(board, &entries[i]);
+            return true;
+        }
     }
 
     return false;
