@@ -162,10 +162,11 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     move_t bestmove;
     mademove_t mademove;
     transpos_type_e transpostype;
-    bool needsfullsearch;
     bool capture;
     bool checknull;
+    int reduction;
     int ext;
+    score_t childalpha, childbeta;
 
     nnodes++;
     if(plies > seldepth)
@@ -238,6 +239,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     transpostype = TRANSPOS_UPPER;
     while((move = pick(&picker)))
     {
+        reduction = 0;
         capture = (board->sqrs[(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & SQUARE_MASK_TYPE) != PIECE_NONE;
 
         if(depth <= 3 && !move_givescheck(board, move) && !capture && alpha < MATE_THRESH && beta > -MATE_THRESH)
@@ -245,23 +247,33 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
             margin = 128 * depth;
             eval = evaluate(board);
             if(eval + margin <= alpha)
+            {
+                i++;
                 continue;
+            }
         }
+
+        childalpha = -beta;
+        childbeta = -alpha;
+
+        if(i)
+            childalpha = -alpha - 1;
 
         move_make(board, move, &mademove);
 
         ext = brain_calcext(board, move, next);
 
-        needsfullsearch = true;
         if(i >= 2 && depth > LMR_REDUCTION && !ext && !capture)
-        {
-            eval = -search_r(board, move, -beta, -alpha, plies + 1, depth - 1 - LMR_REDUCTION, next, NULL);
-            needsfullsearch = eval > alpha;
-        }
+            reduction += LMR_REDUCTION;
 
-        if(needsfullsearch)
+        eval = -search_r(board, move, childalpha, childbeta, plies + 1, depth - 1 + ext - reduction, next - ext, NULL);
+        // conduct a full depth search if a reduced search was better than expected
+        if(reduction && eval > alpha)
+            eval = -search_r(board, move, childalpha, childbeta, plies + 1, depth - 1 + ext, next - ext, NULL);
+
+        if(i && eval > alpha)
             eval = -search_r(board, move, -beta, -alpha, plies + 1, depth - 1 + ext, next - ext, NULL);
-        
+
         move_unmake(board, &mademove);
 
         if(searchcanceled)
@@ -272,7 +284,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
             transpostype = TRANSPOS_PV;
 
             if(!plies)
-                curdepth = eval;
+                curscore = eval;
 
             alpha = eval;
             bestmove = move;
@@ -284,7 +296,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
             ncutnodes++;
             if(!capture)
             {
-                search_killers[depth][(search_killeridx[depth]++) % MAX_KILLER] = move;
+                search_killers[plies][(search_killeridx[plies]++) % MAX_KILLER] = move;
                 search_history[board->tomove][move & MOVEBITS_SRC_MASK][(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] += depth;
                 search_counters[board->tomove][prev & MOVEBITS_SRC_MASK][(prev & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] = bestmove;
             }
