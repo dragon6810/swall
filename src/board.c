@@ -343,8 +343,9 @@ void board_checkstalemate(board_t* board)
         if(board->history[i] != board->hash)
             continue;
         
+        // use greater than 1 to help the transposition table out
         repetitions++;
-        if(repetitions >= 3)
+        if(repetitions > 1)
         {
             board->stalemate = true;
             return;

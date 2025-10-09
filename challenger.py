@@ -236,10 +236,14 @@ def play_from_fen(engW, engB, start_fen, movetime_ms, max_plies=300):
         b = _pc.Board() if start_fen == "startpos" else _pc.Board(start_fen)
         sf = "startpos" if start_fen == "startpos" else b.fen()
         engW.newgame(); engB.newgame()
-        while not b.is_game_over() and len(b.move_stack) < max_plies:
+        while not b.is_game_over(claim_draw=True) and len(b.move_stack) < max_plies:
             side = engW if b.turn == _pc.WHITE else engB
             mv = side.bestmove_fen(sf, [m.uci() for m in b.move_stack], movetime_ms)
             if not is_legal_uci_move(mv):   # illegal/no move => side to move loses
+                oc = b.outcome(claim_draw=True)
+                if oc is not None and oc.winner is None:
+                    return ("1/2-1/2", moves_uci)
+                
                 return ("0-1" if b.turn == _pc.WHITE else "1-0", moves_uci)
             try:
                 b.push_uci(mv)
