@@ -174,7 +174,7 @@ void uci_cmd_go(const char* args)
                 args++;
 
             argend = args;
-            while(*argend && *argend >= '0' && *argend <= '9')
+            while(*argend && (*argend == '-' || (*argend >= '0' && *argend <= '9')))
                 argend++;
             
             memcpy(arg, args, argend - args);
@@ -199,7 +199,7 @@ void uci_cmd_go(const char* args)
                 args++;
 
             argend = args;
-            while(*argend && *argend >= '0' && *argend <= '9')
+            while(*argend && (*argend == '-' || (*argend >= '0' && *argend <= '9')))
                 argend++;
             
             memcpy(arg, args, argend - args);
@@ -249,7 +249,7 @@ void uci_cmd_go(const char* args)
     if(!searchtime)
     {
         searchtime = INT32_MAX;
-        if(times[board.tomove])
+        if(times[board.tomove] > 0)
             searchtime = times[board.tomove] / 25;
     }
 
