@@ -242,17 +242,6 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         givescheck = move_givescheck(board, move);
         nonpv = i || !picker.tt;
 
-        // late move pruning
-        // at shallow depth and late move numbers, don't search quiet moves
-        if(depth <= LMP_MAXDEPTH
-        && i > LMP_THRESHOLD
-        && !capture
-        && !givescheck)
-        {
-            i++;
-            continue;
-        }
-
         // futility pruning
         // if the move probably can't raise alpha (static eval + margin), don't even search it.
         // only do it towards leaves, and if there is no capture, check, or mate.
