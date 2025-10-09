@@ -13,6 +13,8 @@
 
 #define NULL_REDUCTION 3
 #define LMR_REDUCTION 2
+#define LMP_THRESHOLD 8
+#define LMP_MAXDEPTH 3
 
 #define INFO_PERIOD_CLOCKS (100 * (CLOCKS_PER_SEC / 1000))
 
@@ -20,6 +22,7 @@
 #define MATE_THRESH (SCORE_MATE - MAX_DEPTH)
 
 #define DELTA_MARGIN (eval_pscore[PIECE_QUEEN] + 256)
+#define ASPIRATION_MARGIN 50
 
 int search_killeridx[MAX_DEPTH];
 move_t search_killers[MAX_DEPTH][MAX_KILLER];
@@ -27,7 +30,6 @@ score_t search_history[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 move_t search_counters[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 ttable_t search_ttable;
 
-int ntranspos = 0, ncutnodes = 0, npvnodes = 0;
 clock_t searchstart;
 bool searchcanceled;
 int searchtime;
@@ -110,13 +112,8 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
         if(eval > alpha)
             alpha = eval;
         if(alpha >= beta)
-        {
-            ncutnodes++;
             return alpha;
-        }
     }
-
-    npvnodes++;
 
     return besteval;
 }
@@ -163,8 +160,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     move_t bestmove;
     mademove_t mademove;
     transpos_type_e transpostype;
-    bool capture;
-    bool checknull;
+    bool capture, nonpv, givescheck;
     int reduction;
     int ext;
     score_t childalpha, childbeta;
@@ -189,7 +185,6 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     transpos = transpose_find(&search_ttable, board->hash, depth, alpha, beta, false);
     if(transpos)
     {
-        ntranspos++;
         if(outmove)
             *outmove = transpos->bestmove;
         return transpos->eval;
@@ -206,20 +201,23 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         eval = 0; // stalemate
         if(board->check)
             eval = -SCORE_MATE + plies; // checkmate
+        else
+            // store stalemate transposition
+            // we set depth to max because depth shouldn't matter when looking this up, since it's a leaf
+            transpose_store(&search_ttable, board->hash, 0xFF, 0, 0, TRANSPOS_PV);
 
-        // i think that since mate needs plies, we can't store transposition here
         return eval;
     }
 
     nnonterminal++;
-    
-    // not in check, not in king-and-pawn endgame, and depth > 3
-    checknull = !board->check
+
+    // null move pruning: when not in check, not in king-and-pawn endgame, and depth is high enough
+    // we can assume doing nothing is generally worse than doing something. use a null move as a lower bound for the moves.
+    // if we can already cause a fail-high cutoff, we can assume the moves will only be better and exit here.
+    if(!board->check
     && ((board->pboards[board->tomove][PIECE_KING] | board->pboards[board->tomove][PIECE_PAWN])
     != board->pboards[board->tomove][PIECE_NONE])
-    && depth > NULL_REDUCTION;
-
-    if(checknull)
+    && depth > NULL_REDUCTION)
     {
         move_makenull(board, &mademove);
         eval = -search_r(board, 0, -beta, -beta + 1, plies + 1, depth - 1 - NULL_REDUCTION, next, NULL);
@@ -227,7 +225,6 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
 
         if(eval >= beta)
         {
-            ncutnodes++;
             transpose_store(&search_ttable, board->hash, depth, eval, 0, TRANSPOS_LOWER);
             return eval;
         }
@@ -242,12 +239,29 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     {
         reduction = 0;
         capture = (board->sqrs[(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & SQUARE_MASK_TYPE) != PIECE_NONE;
+        givescheck = move_givescheck(board, move);
+        nonpv = i || !picker.tt;
+
+        // late move pruning
+        // at shallow depth and late move numbers, don't search quiet moves
+        if(depth <= LMP_MAXDEPTH
+        && i > LMP_THRESHOLD
+        && !capture
+        && !givescheck)
+        {
+            i++;
+            continue;
+        }
 
         // futility pruning
         // if the move probably can't raise alpha (static eval + margin), don't even search it.
         // only do it towards leaves, and if there is no capture, check, or mate.
         // also don't do it if side to move is in check.
-        if(depth <= 3 && !board->check && !move_givescheck(board, move) && !capture && alpha < MATE_THRESH && beta > -MATE_THRESH)
+        if(depth <= 3 
+        && !board->check 
+        && !givescheck
+        && !capture 
+        && alpha < MATE_THRESH && beta > -MATE_THRESH)
         {
             margin = 128 * depth;
             eval = evaluate(board);
@@ -261,23 +275,31 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         childalpha = -beta;
         childbeta = -alpha;
 
-        if(i || !picker.tt)
+        // PV Search
+        // if the current node isn't a pv node, we assume its probably worse.
+        // do it with a null window, and if its better than we thought research.
+        if(nonpv)
             childalpha = -alpha - 1;
 
         move_make(board, move, &mademove);
 
         ext = brain_calcext(board, move, next);
 
+        // trust move ordering is decent, search later moves to a shallower depth
         if(i >= 2 && depth > LMR_REDUCTION && !ext && !capture)
             reduction += LMR_REDUCTION;
 
+        // initial search
         eval = -search_r(board, move, childalpha, childbeta, plies + 1, depth - 1 + ext - reduction, next - ext, NULL);
-        // conduct a full depth search if a reduced search was better than expected
-        if(reduction && eval > alpha)
-            eval = -search_r(board, move, childalpha, childbeta, plies + 1, depth - 1 + ext, next - ext, NULL);
 
-        if((i || !picker.tt) && eval > alpha)
-            eval = -search_r(board, move, -beta, -alpha, plies + 1, depth - 1 + ext, next - ext, NULL);
+        // we did a null window search, but it was good!
+        // full window.
+        if(nonpv && eval > alpha)
+            childalpha = -beta;
+
+        // we did a reduced or null window search but it was good, so research.
+        if((reduction || nonpv) && eval > alpha)
+            eval = -search_r(board, move, childalpha, childbeta, plies + 1, depth - 1 + ext, next - ext, NULL);
 
         move_unmake(board, &mademove);
 
@@ -296,9 +318,9 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         }
 
         // move was so good that opponent will never let us get to this point
+        // this means that alpha is only a lower bound for this node.
         if(alpha >= beta)
         {
-            ncutnodes++;
             if(!capture)
             {
                 search_killers[plies][(search_killeridx[plies]++) % MAX_KILLER] = move;
@@ -311,8 +333,6 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
 
         i++;
     }
-    
-    npvnodes++;
 
     if(outmove)
         *outmove = bestmove;
@@ -326,9 +346,8 @@ move_t search(board_t* board, int timems)
     int i;
 
     move_t move;
-    score_t score;
+    score_t alpha, beta, score;
 
-    ntranspos = ncutnodes = npvnodes = 0;
     searchstart = clock();
     searchtime = timems - 10;
     searchcanceled = false;
@@ -341,10 +360,19 @@ move_t search(board_t* board, int timems)
 
     lastinfo = clock();
     
+    alpha = SCORE_MIN;
+    beta = SCORE_MAX;
     for(i=1, move=0; i<MAX_DEPTH; i++)
     {
         curdepth = i;
 
+        if(i > 1)
+        {
+            alpha = score - ASPIRATION_MARGIN;
+            beta = score + ASPIRATION_MARGIN;
+        }
+
+runsearch:
         memset(search_killeridx, 0, sizeof(search_killeridx));
         memset(search_killers, 0, sizeof(search_killers));
         memset(search_history, 0, sizeof(search_history));
@@ -354,6 +382,13 @@ move_t search(board_t* board, int timems)
         
         if(searchcanceled)
             break;
+
+        if(score <= alpha || score >= beta)
+        {
+            alpha = SCORE_MIN;
+            beta = SCORE_MAX;
+            goto runsearch;
+        }
 
         curscore = score;
         search_printinfo(board);
