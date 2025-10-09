@@ -30,6 +30,9 @@ score_t search_history[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 move_t search_counters[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 ttable_t search_ttable;
 
+move_t curpv[MAX_DEPTH][MAX_DEPTH];
+int pvcount[MAX_DEPTH];
+
 clock_t searchstart;
 bool searchcanceled;
 int searchtime;
@@ -43,6 +46,10 @@ uint64_t nnodes, nnonterminal;
 
 static inline void search_printinfo(board_t* board)
 {
+    int i;
+
+    char str[MAX_LONGALG];
+
     lastinfo = clock();
 
     printf("info");
@@ -58,6 +65,17 @@ static inline void search_printinfo(board_t* board)
     printf(" nodes %llu", nnodes);
     printf(" nps %llu", (uint64_t) ((double) nnodes / ((double) (clock() - searchstart) / CLOCKS_PER_SEC)));
     printf(" hashfull %d", (int) ((double) search_ttable.occupancy / (double) search_ttable.size * 1000));
+
+    if(pvcount[0])
+    {
+        printf(" pv");
+        for(i=0; i<pvcount[0]; i++)
+        {
+            move_tolongalg(curpv[0][i], str);
+            printf(" %s", str);
+        }
+    }
+
     printf("\n");
 
     printf("info string outdegree %f\n", ((double) nnodes - 1) / (double) nnonterminal);
@@ -165,12 +183,11 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     int ext;
     score_t childalpha, childbeta;
 
+    pvcount[plies] = 0;
+
     nnodes++;
     if(plies > seldepth)
         seldepth = plies;
-
-    if(clock() - lastinfo >= INFO_PERIOD_CLOCKS)
-        search_printinfo(board);
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
     {
@@ -225,7 +242,8 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
 
         if(eval >= beta)
         {
-            transpose_store(&search_ttable, board->hash, depth, eval, 0, TRANSPOS_LOWER);
+            if(eval > -MATE_THRESH && eval < MATE_THRESH)
+                transpose_store(&search_ttable, board->hash, depth, eval, 0, TRANSPOS_LOWER);
             return eval;
         }
     }
@@ -304,6 +322,14 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
 
             alpha = eval;
             bestmove = move;
+
+            curpv[plies][0] = move;
+            pvcount[plies] = 1;
+            if(pvcount[plies + 1])
+            {
+                memcpy(&curpv[plies][1], &curpv[plies + 1][0], pvcount[plies + 1] * sizeof(move_t));
+                pvcount[plies] += pvcount[plies + 1];
+            }
         }
 
         // move was so good that opponent will never let us get to this point
@@ -316,7 +342,8 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
                 search_history[board->tomove][move & MOVEBITS_SRC_MASK][(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] += depth;
                 search_counters[board->tomove][prev & MOVEBITS_SRC_MASK][(prev & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] = bestmove;
             }
-            transpose_store(&search_ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
+            if(eval > -MATE_THRESH && eval < MATE_THRESH)
+                transpose_store(&search_ttable, board->hash, depth, alpha, bestmove, TRANSPOS_LOWER);
             return alpha;
         }
 
@@ -326,7 +353,8 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     if(outmove)
         *outmove = bestmove;
 
-    transpose_store(&search_ttable, board->hash, depth, alpha, bestmove, transpostype);
+    if(eval > -MATE_THRESH && eval < MATE_THRESH)
+        transpose_store(&search_ttable, board->hash, depth, alpha, bestmove, transpostype);
     return alpha;
 }
 
@@ -366,6 +394,7 @@ runsearch:
         memset(search_killers, 0, sizeof(search_killers));
         memset(search_history, 0, sizeof(search_history));
         memset(search_counters, 0, sizeof(search_counters));
+        memset(pvcount, 0, sizeof(pvcount));
 
         score = search_r(board, 0, SCORE_MIN, SCORE_MAX, 0, i, 16, &move);
         
