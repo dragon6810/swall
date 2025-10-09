@@ -29,12 +29,13 @@ move_t search_killers[MAX_DEPTH][MAX_KILLER];
 score_t search_history[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 move_t search_counters[TEAM_COUNT][BOARD_AREA][BOARD_AREA];
 ttable_t search_ttable;
+_Atomic bool search_active;
+_Atomic bool search_cancel;
 
 move_t curpv[MAX_DEPTH][MAX_DEPTH];
 int pvcount[MAX_DEPTH];
 
 clock_t searchstart;
-bool searchcanceled;
 int searchtime;
 move_t bestknown;
 clock_t lastinfo;
@@ -95,7 +96,7 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
     {
-        searchcanceled = true;
+        search_cancel = true;
         return 0;
     }
 
@@ -122,7 +123,7 @@ static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, s
         eval = -brain_quiesencesearch(board, plies + 1, -beta, -alpha);
         move_unmake(board, &mademove);
 
-        if(searchcanceled)
+        if(search_cancel)
             return 0;
 
         if(eval > besteval)
@@ -140,13 +141,12 @@ static inline int brain_calcext(board_t* board, move_t move, int next)
 {
     int ext;
 
-    int dst, type;
+    int dst;
     piece_e ptype;
 
     ext = 0;
 
     dst = (move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS;
-    type = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
 
     ptype = board->sqrs[dst] & SQUARE_MASK_TYPE;
 
@@ -154,9 +154,6 @@ static inline int brain_calcext(board_t* board, move_t move, int next)
         ext++;
 
     if(ptype == PIECE_PAWN && (dst / BOARD_LEN == 1 || dst / BOARD_LEN == BOARD_LEN - 2))
-        ext++;
-
-    if(type >= MOVETYPE_PROMQ && type <= MOVETYPE_PROMN)
         ext++;
 
     if(ext > next)
@@ -178,7 +175,8 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     move_t bestmove;
     mademove_t mademove;
     transpos_type_e transpostype;
-    bool capture, nonpv, givescheck;
+    movetype_e movetype;
+    bool capture, promotes, nonpv, givescheck;
     int reduction;
     int ext;
     score_t childalpha, childbeta;
@@ -191,7 +189,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
 
     if((double) (clock() - searchstart) / CLOCKS_PER_SEC * 1000 >= searchtime)
     {
-        searchcanceled = true;
+        search_cancel = true;
         return 0;
     }
 
@@ -219,9 +217,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         if(board->check)
             eval = -SCORE_MATE + plies; // checkmate
         else
-            // store stalemate transposition
-            // we set depth to max because depth shouldn't matter when looking this up, since it's a leaf
-            transpose_store(&search_ttable, board->hash, 0xFF, 0, 0, TRANSPOS_PV);
+            transpose_store(&search_ttable, board->hash, depth, 0, 0, TRANSPOS_PV);
 
         return eval;
     }
@@ -240,6 +236,8 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         eval = -search_r(board, 0, -beta, -beta + 1, plies + 1, depth - 1 - NULL_REDUCTION, next, NULL);
         move_unmakenull(board, &mademove);
 
+        // doing nothing was good enough to cause a cutoff, doing something would
+        // probably only be better
         if(eval >= beta)
         {
             if(eval > -MATE_THRESH && eval < MATE_THRESH)
@@ -256,7 +254,10 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
     while((move = pick(&picker)))
     {
         reduction = 0;
-        capture = (board->sqrs[(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & SQUARE_MASK_TYPE) != PIECE_NONE;
+        movetype = (move & MOVEBITS_TYP_MASK) >> MOVEBITS_TYP_BITS;
+        capture = ((board->sqrs[(move & MOVEBITS_DST_MASK) >> MOVEBITS_DST_BITS] & SQUARE_MASK_TYPE) != PIECE_NONE)
+        || movetype == MOVETYPE_ENPAS;
+        promotes = movetype >= MOVETYPE_PROMQ && movetype <= MOVETYPE_PROMN;
         givescheck = move_givescheck(board, move);
         nonpv = i || !picker.tt;
 
@@ -265,9 +266,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         // only do it towards leaves, and if there is no capture, check, or mate.
         // also don't do it if side to move is in check.
         if(depth <= 3 
-        && !board->check 
-        && !givescheck
-        && !capture 
+        && !board->check && !givescheck && !capture && !promotes
         && alpha < MATE_THRESH && beta > -MATE_THRESH)
         {
             margin = 128 * depth;
@@ -310,7 +309,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
 
         move_unmake(board, &mademove);
 
-        if(searchcanceled)
+        if(search_cancel)
             return 0;
 
         if(eval > alpha)
@@ -365,15 +364,22 @@ move_t search(board_t* board, int timems)
     move_t move;
     score_t alpha, beta, score;
 
+    if(search_active)
+        return 0;
+    search_active = true;
+
     searchstart = clock();
     searchtime = timems - 10;
-    searchcanceled = false;
+    search_cancel = false;
     bestknown = 0;
     nnodes = nnonterminal = 0;
     seldepth = 0;
 
     if(book_findmove(board, &move))
+    {
+        search_active = false;
         return move;
+    }
 
     lastinfo = clock();
     
@@ -398,15 +404,15 @@ runsearch:
 
         score = search_r(board, 0, SCORE_MIN, SCORE_MAX, 0, i, 16, &move);
         
-        if(searchcanceled)
+        if(search_cancel)
             break;
 
-        if(score <= alpha || score >= beta)
-        {
+        if(score <= alpha)
             alpha = SCORE_MIN;
+        if(score >= beta)
             beta = SCORE_MAX;
+        if(score <= alpha || score >= beta)
             goto runsearch;
-        }
 
         curscore = score;
         search_printinfo(board);
@@ -414,6 +420,7 @@ runsearch:
         bestknown = move;
     }
 
+    search_active = false;
     return move;
 }
 

@@ -1,4 +1,5 @@
 #include <locale.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -109,13 +110,32 @@ void uci_cmd_perft(const char* args)
     perft(&board, depth);
 }
 
-void uci_cmd_go(const char* args)
+void* startsearch(void* searchtime)
 {
     move_t move;
     char str[MAX_LONGALG];
+    int inttime;
+
+    inttime = *((int*)searchtime);
+
+    move = search(&board, inttime);
+
+    move_tolongalg(move, str);
+    printf("bestmove %s\n", str);
+
+    return NULL;
+}
+
+pthread_t searchthread;
+
+void uci_cmd_go(const char* args)
+{
     char arg[MAX_INPUT];
     const char *argend;
     int times[TEAM_COUNT], searchtime;
+
+    if(search_active)
+        return;
 
     while(*args && *args <= 32)
         args++;
@@ -140,6 +160,12 @@ void uci_cmd_go(const char* args)
 
         if(!*args)
             break;
+
+        if(!strncmp(args, "infinite", 5))
+        {
+            args += 8;
+            searchtime = INT32_MAX;
+        }
 
         if(!strncmp(args, "wtime", 5))
         {
@@ -222,15 +248,21 @@ void uci_cmd_go(const char* args)
 
     if(!searchtime)
     {
-        searchtime = 100;
+        searchtime = INT32_MAX;
         if(times[board.tomove])
             searchtime = times[board.tomove] / 25;
     }
 
-    move = search(&board, searchtime);
-    move_tolongalg(move, str);
+    pthread_create(&searchthread, NULL, startsearch, &searchtime);
+}
 
-    printf("bestmove %s\n", str);
+void uci_cmd_stop(const char* args)
+{
+    if(!search_active)
+        return;
+
+    search_cancel = true;
+    pthread_join(searchthread, NULL);
 }
 
 void uci_cmd_position(const char* args)
@@ -334,8 +366,16 @@ void uci_main(void)
             board_print(&board);
         else if(!strncmp(line, "go", 2))
             uci_cmd_go(line + 2);
+        else if(!strncmp(line, "stop", 4))
+            uci_cmd_stop(line + 4);
         else if(!strncmp(line, "quit", 4))
             break;
+    }
+
+    if(search_active)
+    {
+        search_cancel = true;
+        pthread_join(searchthread, NULL);
     }
 }
 

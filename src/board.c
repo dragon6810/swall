@@ -101,7 +101,7 @@ void board_print(const board_t* board)
         printf("+\n");
     }
 
-    printf("  ");
+    printf(" ");
     for(i=0; i<BOARD_LEN; i++)
         printf("  %c ", 'a' + i);
     printf("\n\n");
