@@ -16,9 +16,9 @@ static const score_t eval_pscore[PIECE_COUNT] =
     0,   // PIECE_NONE
     0,   // PIECE_KING
     900, // PIECE_QUEEN
-    400, // PIECE_ROOK
-    350, // PIECE_BISHOP
-    300, // PIECE_KNIGHT
+    500, // PIECE_ROOK
+    320, // PIECE_BISHOP
+    310, // PIECE_KNIGHT
     100, // PIECE_PAWN
 };
 
