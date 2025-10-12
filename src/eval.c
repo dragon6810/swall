@@ -133,7 +133,7 @@ static inline float eval_endgameweight(score_t totalmaterial)
         t = 0;
 
     // cubic growth so midgame lasts longer
-    return t * t * t;
+    return t * t;
 }
 
 static inline void eval_countmaterial(board_t* board, score_t material[TEAM_COUNT])
