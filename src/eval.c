@@ -123,7 +123,17 @@ static inline void eval_positionbonus(board_t* board, float endgame, score_t bon
 
 static inline float eval_endgameweight(score_t totalmaterial)
 {
-    return 1.0 - ((float) totalmaterial / (float) startmaterial);
+    float t;
+
+    // 0 = startpos, 1 = king vs king
+    t = 1.0 - ((float) totalmaterial / (float) startmaterial);
+
+    // extremely unlikely, but t could be < 0 if someone promotes a lot
+    if(t < 0)
+        t = 0;
+
+    // cubic growth so midgame lasts longer
+    return t * t * t;
 }
 
 static inline void eval_countmaterial(board_t* board, score_t material[TEAM_COUNT])
