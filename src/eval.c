@@ -1,52 +1,48 @@
 #include "eval.h"
 
-static const score_t startmaterial = 0
-        + eval_pscore[PIECE_QUEEN] 
+static const score_t startmaterial = 
+          eval_pscore[PIECE_QUEEN]
         + eval_pscore[PIECE_ROOK] * 2 
-        + eval_pscore[PIECE_BISHOP] * 2 
-        + eval_pscore[PIECE_KNIGHT] * 2 
+        + eval_pscore[PIECE_BISHOP] * 2 + eval_pscore[PIECE_KNIGHT] * 2 
         + eval_pscore[PIECE_PAWN] * 8;
 
 static inline bitboard_t eval_isolatedpawnmask(team_e team, uint8_t square)
 {
-    const bitboard_t file = 0x1010101010101010;
-
     int8_t f;
     bitboard_t mask;
 
-    f = square + BOARD_LEN;
+    f = square % BOARD_LEN;
 
     mask = 0;
     if(f)
-        mask |= file << (f - 1);
+        mask |= board_files[f - 1];
     if(f < BOARD_LEN - 1)
-        mask |= file << (f + 1);
+        mask |= board_files[f + 1];
 
     return mask;
 }
 
 static inline bitboard_t eval_passedpawnmask(team_e team, uint8_t square)
 {
-    const bitboard_t file = 0x1010101010101010;
     const bitboard_t full = UINT64_MAX;
 
     int8_t r, f;
     bitboard_t mask;
 
     r = square / BOARD_LEN;
-    f = square + BOARD_LEN;
+    f = square % BOARD_LEN;
 
     mask = 0;
     if(f)
-        mask |= file << (f - 1);
-    mask |= file << f;
+        mask |= board_files[f - 1];
+    mask |= board_files[f];
     if(f < BOARD_LEN - 1)
-        mask |= file << (f + 1);
+        mask |= board_files[f + 1];
 
     if(team == TEAM_WHITE)
         mask &= full << ((r + 1) * BOARD_LEN);
     else
-        mask &= full >> ((BOARD_LEN - (r + 1)) * BOARD_LEN);
+        mask &= full >> ((BOARD_LEN - (r - 1)) * BOARD_LEN);
 
     return mask;
 }
@@ -132,8 +128,9 @@ static inline float eval_endgameweight(score_t totalmaterial)
     if(t < 0)
         t = 0;
 
-    // cubic growth so midgame lasts longer
-    return t * t;
+    // i tried adding some nonlinearity but it made it worse
+    // worth looking into whether linear is actually good here
+    return t;
 }
 
 static inline void eval_countmaterial(board_t* board, score_t material[TEAM_COUNT])

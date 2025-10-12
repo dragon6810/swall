@@ -510,9 +510,6 @@ void move_alllegal(board_t* restrict board, moveset_t* restrict outmoves, bool c
     int square;
 
     outmoves->count = 0;
-    if(board->stalemate)
-        return;
-
     for(p=PIECE_KING; p<PIECE_COUNT; p++)
     {
         bb = board->pboards[board->tomove][p];

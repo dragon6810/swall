@@ -1,6 +1,7 @@
 #include "search.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -12,9 +13,6 @@
 #include "zobrist.h"
 
 #define NULL_REDUCTION 3
-#define LMR_REDUCTION 2
-#define LMP_THRESHOLD 8
-#define LMP_MAXDEPTH 3
 
 #define INFO_PERIOD_CLOCKS (100 * (CLOCKS_PER_SEC / 1000))
 
@@ -44,6 +42,7 @@ int curdepth = 0;
 int seldepth = 0;
 score_t curscore = 0;
 uint64_t nnodes, nnonterminal;
+float mbf;
 
 static inline void search_printinfo(board_t* board)
 {
@@ -79,7 +78,7 @@ static inline void search_printinfo(board_t* board)
 
     printf("\n");
 
-    printf("info string outdegree %f\n", ((double) nnodes - 1) / (double) nnonterminal);
+    printf("info string outdegree %f\n", mbf);
 }
 
 static score_t brain_quiesencesearch(board_t* board, int plies, score_t alpha, score_t beta)
@@ -265,7 +264,7 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         // if the move probably can't raise alpha (static eval + margin), don't even search it.
         // only do it towards leaves, and if there is no capture, check, or mate.
         // also don't do it if side to move is in check.
-        if(depth <= 3 
+        if(depth <= 2
         && !board->check && !givescheck && !capture && !promotes
         && alpha < MATE_THRESH && beta > -MATE_THRESH)
         {
@@ -292,8 +291,17 @@ static score_t search_r(board_t* board, move_t prev, score_t alpha, score_t beta
         ext = brain_calcext(board, move, next);
 
         // trust move ordering is decent, search later moves to a shallower depth
-        if(i >= 2 && depth > LMR_REDUCTION && !ext && !capture)
-            reduction += LMR_REDUCTION;
+        reduction = 0;
+        if(!ext && !capture)
+        {
+            if(i >= 2)
+                reduction = 1;
+            if(i >= 6)
+                reduction = depth / 3;
+            
+            if(reduction >= depth)
+                reduction = depth - 1;
+        }
 
         // initial search
         eval = -search_r(board, move, childalpha, childbeta, plies + 1, depth - 1 + ext - reduction, next - ext, NULL);
@@ -363,6 +371,7 @@ move_t search(board_t* board, int timems)
 
     move_t move;
     score_t alpha, beta, score;
+    uint64_t lastnnodes;
 
     if(search_active)
         return 0;
@@ -374,6 +383,7 @@ move_t search(board_t* board, int timems)
     bestknown = 0;
     nnodes = nnonterminal = 0;
     seldepth = 0;
+    mbf = 0;
 
     if(book_findmove(board, &move))
     {
@@ -387,6 +397,8 @@ move_t search(board_t* board, int timems)
     beta = SCORE_MAX;
     for(i=1, move=0; i<MAX_DEPTH; i++)
     {
+        lastnnodes = nnodes;
+
         curdepth = i;
 
         if(i > 1)
@@ -413,6 +425,8 @@ runsearch:
             beta = SCORE_MAX;
         if(score <= alpha || score >= beta)
             goto runsearch;
+
+        mbf = powf(nnodes - lastnnodes, 1.0 / (float) i);
 
         curscore = score;
         search_printinfo(board);
